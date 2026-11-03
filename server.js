@@ -1014,6 +1014,18 @@ async function handleApi(req, res, pathname, url) {
     return sendJson(res, 200, await loadMatchup(Number(match[1])));
   }
 
+  if (req.method === 'GET' && pathname === '/api/od/itemTitles') {
+    const titles = await cached('item-titles', TTL.match, async () => {
+      const items = await odGet('/constants/items');
+      const names = {};
+      Object.entries(items || {}).forEach(([key, item]) => {
+        if (item && item.dname) names[key] = item.dname;
+      });
+      return names;
+    });
+    return sendJson(res, 200, titles);
+  }
+
   if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/heroes\/(\d{1,3})\/itemPopularity$/))) {
     const items = await cached(`hero-items:${match[1]}`, TTL.match, () => odGet(`/heroes/${match[1]}/itemPopularity`));
     return sendJson(res, 200, items);

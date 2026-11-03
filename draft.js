@@ -14,6 +14,8 @@ const DRAFT_STAGES = [
   ['mid_game_items', 'Середина'],
   ['late_game_items', 'Поздняя игра']
 ];
+// Части больших предметов: в подсказке закупа на середину и конец игры они только мешают
+const DRAFT_COMPONENTS = new Set(['hyperstone', 'mystic_staff', 'platemail', 'demon_edge', 'sacred_relic', 'reaver', 'ogre_axe', 'blade_of_alacrity', 'staff_of_wizardry', 'eagle', 'talisman_of_evasion', 'point_booster', 'vitality_booster', 'energy_booster', 'ring_of_health', 'void_stone', 'claymore', 'broadsword', 'mithril_hammer', 'javelin', 'belt_of_strength', 'boots_of_elves', 'robe', 'gloves', 'chainmail', 'quarterstaff', 'helm_of_iron_will', 'blades_of_attack', 'gauntlets', 'slippers', 'mantle', 'circlet', 'lifesteal']);
 const DRAFT_ENEMY_TIPS = [
   { heroes: ['Riki', 'Clinkz', 'Bounty Hunter', 'Nyx Assassin', 'Weaver'], text: 'Невидимость у врага: {names}. Купите Dust и Sentry Ward.' },
   { heroes: ['Phantom Lancer', 'Naga Siren', 'Terrorblade', 'Chaos Knight'], text: 'Иллюзии у врага: {names}. Пригодится урон по площади.' },
@@ -29,6 +31,7 @@ const draft = {
   enemy: [],
   ban: [],
   myHero: null,
+  itemTitles: null,
   tables: new Map(),
   token: 0
 };
@@ -100,7 +103,7 @@ function draftScore(hero, bracket, own) {
   });
 
   const meta = draftMetaWinrate(hero, bracket);
-  if (meta != null) score += (meta - 0.5) * 50;
+  if (meta != null) score += (meta - 0.5) * 100;
 
   const mine = own.get(hero.id);
   if (mine && mine.games >= 3) {
@@ -226,6 +229,7 @@ async function renderDraftBuild() {
 
   const data = await proFetchJson(`/heroes/${heroId}/itemPopularity`);
   await loadItemNames();
+  if (!draft.itemTitles) draft.itemTitles = await proFetchJson('/itemTitles');
   if (draft.myHero !== heroId) return;
   if (!data || !itemNames) {
     box.innerHTML = '<p class="text-sm text-amber-300">Сейчас предметы недоступны. Попробуй через минуту.</p>';
@@ -236,7 +240,7 @@ async function renderDraftBuild() {
     const skipConsumables = key === 'mid_game_items' || key === 'late_game_items';
     const items = Object.entries(data[key] || {})
       .map(([id, count]) => ({ key: itemNames[id], count }))
-      .filter(item => item.key && !item.key.startsWith('recipe') && !(skipConsumables && CONSUMABLE_ITEMS.has(item.key)))
+      .filter(item => item.key && !item.key.startsWith('recipe') && !(skipConsumables && (CONSUMABLE_ITEMS.has(item.key) || DRAFT_COMPONENTS.has(item.key))))
       .sort((a, b) => b.count - a.count)
       .slice(0, 6);
     if (items.length === 0) return '';
@@ -247,7 +251,7 @@ async function renderDraftBuild() {
           ${items.map(item => `
             <span class="draft-item">
               <img loading="lazy" decoding="async" src="${DRAFT_ITEM_ICON}${esc(item.key)}.png" alt="" onerror="this.remove()">
-              ${esc(formatItemName(item.key))}
+              ${esc((draft.itemTitles && draft.itemTitles[item.key]) || formatItemName(item.key))}
             </span>`).join('')}
         </div>
       </div>`;
