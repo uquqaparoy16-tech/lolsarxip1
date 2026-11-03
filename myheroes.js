@@ -10,6 +10,7 @@ const MH_PRIOR_GAMES = 5; // сглаживание: 1 победа из 1 иг�
 const MH_WIN_WEIGHT = 0.6;
 const MH_SUPPORT_LAST_HITS = 2.5; // меньше добиваний в минуту: герой шёл в поддержку
 const MH_TIPS_MAX = 6;
+const MH_MAIN_TIPS = 2;
 const MH_FEW_GAMES = 5;
 const MH_SPLIT_MIN = 2;
 const MH_SPLIT_GAP = 0.15;
@@ -23,6 +24,7 @@ const MH_ENEMIES_SHOWN = 3;
 const MH_TREND_RECENT = 4;
 const MH_TREND_MIN = 8;
 const MH_DEATHS_GAP = 1.5;
+const MH_OWN_ITEMS = 6;
 const MH_DETAIL_GAMES = 6;
 const MH_DETAIL_WORKERS = 3;
 const MH_LENGTHS = [
@@ -133,6 +135,7 @@ function mhBenchRows(row, result) {
 }
 
 function mhApplyBench(row, result) {
+  row.result = result;
   row.bench = result ? mhBenchRows(row, result) : [];
   if (row.bench.length === 0) return;
   const skill = row.bench.reduce((sum, item) => sum + item.percentile, 0) / row.bench.length;
@@ -163,13 +166,17 @@ async function mhLoad() {
     return;
   }
 
-  const rows = mhGroupHeroes(matches).slice(0, MH_CANDIDATES);
+  const all = mhGroupHeroes(matches);
+  const usual = all.slice().sort((a, b) => b.count - a.count)[0];
+  const rows = all.slice(0, MH_CANDIDATES);
+  if (!rows.includes(usual)) rows.push(usual);
   const benches = await Promise.all(rows.map(row => getBenchmarks(row.heroId)));
   if (token !== myHeroes.token) return;
   rows.forEach((row, index) => mhApplyBench(row, benches[index]));
 
   myHeroes.matches = matches;
   myHeroes.rows = rows.sort((a, b) => b.score - a.score).slice(0, MH_SHOWN);
+  if (!myHeroes.rows.includes(usual)) myHeroes.rows.push({ ...usual, usual: true });
   mhRenderList();
   mhOpen(myHeroes.rows[0].heroId, false);
 }
@@ -178,9 +185,8 @@ function mhRenderList() {
   document.getElementById('myheroes-list').innerHTML = myHeroes.rows.map((row, index) => `
     <button type="button" class="mh-hero ${row.heroId === myHeroes.open ? 'active' : ''}" onclick="mhOpen(${row.heroId})">
       <img loading="lazy" decoding="async" src="${getHeroIcon(row.heroId)}" alt="">
-      <span class="mh-name"><small>${index + 1} место</small>${esc(getHeroName(row.heroId))}</span>
-      <span class="mh-line">Победы: ${mhScoreLine(row.wins, row.count)}, KDA ${mhNumber(row.kda, 1)}</span>
-      ${mhStrength(row) ? `<span class="mh-note">${esc(mhStrength(row))}</span>` : ''}
+      <span class="mh-name"><small>${row.usual ? 'чаще всего' : `${index + 1}.`}</small>${esc(getHeroName(row.heroId))}</span>
+      <span class="mh-line">Победы ${mhScoreLine(row.wins, row.count)}, KDA ${mhNumber(row.kda, 1)}</span>
     </button>`).join('');
 }
 
@@ -214,7 +220,7 @@ function mhTipSplit(row) {
 
 function mhTipBench(row) {
   const worst = row.bench.slice().sort((a, b) => a.percentile - b.percentile)[0];
-  if (!worst || worst.percentile >= 0.5) return null;
+  if (!worst) return null;
   const step = PRO_NEXT_STEPS.find(value => value > worst.percentile + 0.001);
   const target = valueAtPercentile(worst.points, step);
   const shown = target == null ? null : mhNumber(target, worst.digits);
@@ -294,11 +300,11 @@ function mhTipItem(row, counts) {
   const fact = `С ним победы ${mhScoreLine(best.wins, best.games)}, без него ${mhScoreLine(best.otherWins, best.otherGames)}.`;
   return best.gap > 0
     ? { weight: 0.4 + best.gap / 2, title: `Твой лучший предмет на этом герое: ${name}`, fact, action: 'Старайся собирать его раньше других предметов.', item: best.key, good: true }
-    : { weight: 0.4 + Math.abs(best.gap) / 2, title: `С предметом ${name} ты играешь хуже`, fact, action: 'Попробуй заменить его: посмотри сборки ниже и что собирал в победах.', item: best.key };
+    : { weight: 0.4 + Math.abs(best.gap) / 2, title: `С предметом ${name} ты играешь хуже`, fact, action: 'Попробуй заменить его: ниже есть твоя сборка и обычная сборка на этом герое.', item: best.key };
 }
 
 function mhTipMissing(row, counts, popular) {
-  if (!popular || !itemNames || row.count < MH_FEW_GAMES) return null;
+  if (!popular || !itemNames) return null;
   if (row.support && HEROES_DB[row.heroId].role !== 'Support') return null;
 
   const totals = new Map();
@@ -412,25 +418,65 @@ function mhMatchButton(label, m) {
   return `<button type="button" class="pro-btn" onclick="statsOpenMatch('${Number(m.match_id)}')">${esc(label)}: ${esc(score)}</button>`;
 }
 
-function mhGuideHtml(row, tips) {
+function mhBenchSource(row) {
+  return {
+    duration: 60,
+    gold_per_min: mhMean(row.games, m => m.gold_per_min),
+    xp_per_min: mhMean(row.games, m => m.xp_per_min),
+    last_hits: mhMean(row.games, m => perMinute(m, m.last_hits)),
+    hero_damage: mhMean(row.games, m => perMinute(m, m.hero_damage)),
+    tower_damage: mhMean(row.games, m => m.tower_damage)
+  };
+}
+
+function mhOwnItemsHtml(row) {
+  const items = [...mhItemCounts(row).values()].sort((a, b) => b.games - a.games).slice(0, MH_OWN_ITEMS);
+  if (items.length === 0) return '';
+  return `
+    <div>
+      <h4>Что собираешь ты</h4>
+      <div class="draft-items">
+        ${items.map(item => `
+          <span class="draft-item">
+            <img loading="lazy" decoding="async" src="${DRAFT_ITEM_ICON}${esc(item.key)}.png" alt="" onerror="this.remove()">
+            ${esc(draftItemTitle(item.key))} <small>${mhScoreLine(item.games, row.count)}</small>
+          </span>`).join('')}
+      </div>
+    </div>`;
+}
+
+function mhGuideHtml(row, tips, popular) {
   const byKda = row.games.slice().sort((a, b) => mhKda(b) - mhKda(a));
   const best = byKda.find(mhWon);
   const worst = byKda.slice().reverse().find(m => !mhWon(m));
   const strength = mhStrength(row);
+  const main = tips.slice(0, MH_MAIN_TIPS);
+  const rest = tips.slice(MH_MAIN_TIPS);
   return `
-    <h4 class="text-base font-semibold text-white">Как тебе лучше играть на ${esc(getHeroName(row.heroId))}</h4>
-    ${row.count < MH_FEW_GAMES ? `<p class="text-sm text-amber-300">Игр на этом герое пока мало: ${gamesWord(row.count)}. Выводы примерные.</p>` : ''}
-    ${strength ? `<p class="text-sm text-slate-300">Сильная сторона. ${esc(strength)}.</p>` : ''}
-    ${tips.length > 0
-      ? `<div class="pro-habits">${tips.map(mhTipHtml).join('')}</div>`
-      : '<p class="text-sm text-slate-400">Явных слабых мест на этом герое не видно: показатели ровные.</p>'}
-    <div class="flex flex-wrap gap-2">
-      ${mhMatchButton('Лучшая игра', best)}
-      ${mhMatchButton('Худшая игра', worst)}
-      <button id="mh-errors-btn" type="button" class="pro-btn" onclick="mhLoadErrors(${row.heroId})">Найти ошибки в последних матчах</button>
-    </div>
-    <div id="mh-errors" class="space-y-3" aria-live="polite"></div>
-    <p class="text-xs text-slate-400">Советы посчитаны по твоим матчам. Победы и показатели связаны, но одно не всегда причина другого.</p>`;
+    <h4 class="text-base font-semibold text-white">Главное на ${esc(getHeroName(row.heroId))}</h4>
+    ${row.count < MH_FEW_GAMES ? `<p class="text-xs text-amber-300">Игр на этом герое пока мало, выводы примерные.</p>` : ''}
+    ${main.length > 0
+      ? `<div class="pro-habits">${main.map(mhTipHtml).join('')}</div>`
+      : '<p class="text-sm text-slate-400">Явных слабых мест не видно.</p>'}
+    <details class="mh-more">
+      <summary>Подробнее</summary>
+      <div class="space-y-4">
+        ${strength ? `<p class="text-sm text-slate-300">Сильная сторона. ${esc(strength)}.</p>` : ''}
+        ${rest.length > 0 ? `<div class="pro-habits">${rest.map(mhTipHtml).join('')}</div>` : ''}
+        ${row.result ? `<div class="space-y-3"><h4 class="text-sm font-semibold text-white">Сколько не хватает до следующего уровня</h4>${benchRows(row.result, mhBenchSource(row))}</div>` : ''}
+        <div class="draft-build">
+          ${mhOwnItemsHtml(row)}
+          ${popular && itemNames ? draftStagesHtml(popular) : ''}
+        </div>
+        <div class="flex flex-wrap gap-2">
+          ${mhMatchButton('Лучшая игра', best)}
+          ${mhMatchButton('Худшая игра', worst)}
+          <button id="mh-errors-btn" type="button" class="pro-btn" onclick="mhLoadErrors(${row.heroId})">Найти ошибки в последних матчах</button>
+        </div>
+        <div id="mh-errors" class="space-y-3" aria-live="polite"></div>
+        <p class="text-xs text-slate-400">Советы посчитаны по твоим матчам. Турбо и покинутые игры не считаются. Победы и показатели связаны, но одно не всегда причина другого.</p>
+      </div>
+    </details>`;
 }
 
 async function mhOpen(heroId, scroll = true) {
@@ -450,7 +496,7 @@ async function mhOpen(heroId, scroll = true) {
     draftLoadTitles()
   ]);
   if (myHeroes.open !== heroId) return;
-  box.innerHTML = mhGuideHtml(row, buildHeroGuide(row, { matches: myHeroes.matches, popular, versus }));
+  box.innerHTML = mhGuideHtml(row, buildHeroGuide(row, { matches: myHeroes.matches, popular, versus }), popular);
 }
 
 async function mhLoadErrors(heroId) {
