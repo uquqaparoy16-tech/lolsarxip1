@@ -17,3 +17,7 @@ services:
         sync: false
       - key: OPENDOTA_API_KEY
         sync: false
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_FOLDER_ID
+        sync: false

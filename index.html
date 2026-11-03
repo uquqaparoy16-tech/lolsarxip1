@@ -4,6 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dota 2 True Skill — оценка ПТС и разбор ошибок</title>
+  <meta name="description" content="Бесплатный разбор игр Dota 2 по нику или ID: оценка ПТС, причины смертей, сравнение с другими игроками, сильные герои на твоём ранге и план на следующие игры.">
+  <meta name="theme-color" content="#0A0B10">
+  <link rel="canonical" href="https://dota-mmr-checker.onrender.com/">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Dota 2 True Skill — что мешает апнуться">
+  <meta property="og:description" content="Введи ник или ID и узнай свой реальный уровень, главные ошибки и задачу на следующую игру. Бесплатно и без входа.">
+  <meta property="og:image" content="https://dota-mmr-checker.onrender.com/og.png">
+  <meta property="og:url" content="https://dota-mmr-checker.onrender.com/">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/global/dota2_logo_symbol.png" type="image/png">
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.js"></script>
@@ -14,6 +25,68 @@
 
 
   <style>
+    /* Разделы из pro.js */
+    .pro-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-left: auto; }
+    .pro-actions.hidden { display: none; }
+    .pro-btn { padding: .5rem .85rem; border-radius: .6rem; font-size: .8rem; font-weight: 600; color: #fff; background: rgba(240, 68, 79, .14); border: 1px solid rgba(240, 68, 79, .35); transition: background .2s, border-color .2s; }
+    .pro-btn:hover { background: #F0444F; border-color: #F0444F; }
+    .pro-btn:disabled { opacity: .6; cursor: wait; }
+    .pro-link { font-size: .8rem; color: #A3ACBB; text-decoration: underline; text-underline-offset: 3px; background: none; border: 0; padding: 0; white-space: nowrap; }
+    .pro-link:hover { color: #fff; }
+    .pro-chip { padding: .15rem .55rem; border-radius: 999px; font-size: .8rem; color: #CBD5E1; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .08); max-width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pro-chip:hover { border-color: rgba(240, 68, 79, .5); color: #fff; }
+    .pro-pill { display: inline-flex; align-items: center; gap: .45rem; padding: .35rem .7rem .35rem .4rem; border-radius: .6rem; font-size: .8rem; font-weight: 600; color: #CBD5E1; background: rgba(0, 0, 0, .35); border: 1px solid rgba(255, 255, 255, .08); white-space: nowrap; }
+    .pro-pill img { width: 2rem; height: 1.15rem; object-fit: cover; border-radius: .25rem; }
+    .pro-pill small { color: #A3ACBB; font-weight: 500; }
+    .pro-pill.active { color: #fff; border-color: #F0444F; background: rgba(240, 68, 79, .14); }
+    .pro-bars { display: grid; gap: 1rem 2rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); }
+    .pro-bar-head { display: flex; justify-content: space-between; gap: .75rem; font-size: .85rem; color: #CBD5E1; }
+    .pro-bar-head strong { color: #fff; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: .95rem; }
+    .pro-track { height: .5rem; margin: .4rem 0; border-radius: 999px; background: rgba(255, 255, 255, .07); overflow: hidden; }
+    .pro-track i { display: block; height: 100%; border-radius: 999px; transition: width .6s cubic-bezier(.22, 1, .36, 1); }
+    .pro-track i.good { background: #10B981; }
+    .pro-track i.mid { background: #F59E0B; }
+    .pro-track i.bad { background: #F0444F; }
+    .pro-bar-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .1rem .75rem; font-size: .75rem; color: #A3ACBB; }
+    .pro-bar-foot .good, .pro-meta-row .good { color: #34D399; }
+    .pro-bar-foot .mid { color: #FBBF24; }
+    .pro-bar-foot .bad, .pro-meta-row .bad { color: #F87171; }
+    .pro-meta { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); }
+    .pro-meta h4 { margin-bottom: .6rem; font-size: .85rem; font-weight: 600; color: #fff; }
+    .pro-meta-row { display: grid; grid-template-columns: 2.4rem minmax(0, 1fr) auto; gap: 0 .6rem; align-items: center; padding: .35rem 0; font-size: .85rem; color: #CBD5E1; }
+    .pro-meta-row img { width: 2.4rem; height: 1.4rem; object-fit: cover; border-radius: .25rem; grid-row: span 2; }
+    .pro-meta-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pro-meta-row small { grid-column: 2 / -1; font-size: .75rem; color: #A3ACBB; }
+    .pro-hero { display: grid; grid-template-columns: 2.4rem minmax(0, 1fr) auto; gap: .6rem; align-items: center; padding: .28rem 0; font-size: .85rem; color: #CBD5E1; }
+    .pro-hero img { width: 2.4rem; height: 1.4rem; object-fit: cover; border-radius: .25rem; }
+    .pro-hero span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pro-hero strong { font-size: .8rem; font-weight: 600; color: #fff; white-space: nowrap; }
+    .pro-grades { display: flex; flex-wrap: wrap; gap: .3rem; }
+    .pro-grade { width: 1.9rem; height: 1.9rem; border-radius: .4rem; font-size: .8rem; font-weight: 700; color: #06070A; transition: transform .15s; }
+    .pro-grade:hover { transform: translateY(-2px); }
+    .pro-grade.g-S { background: #34D399; }
+    .pro-grade.g-A { background: #86EFAC; }
+    .pro-grade.g-B { background: #FDE68A; }
+    .pro-grade.g-C { background: #FDBA74; }
+    .pro-grade.g-D { background: #F87171; }
+    .pro-dots { display: flex; flex-wrap: wrap; gap: .3rem; }
+    .pro-dots span { width: .8rem; height: .8rem; border-radius: 999px; }
+    .pro-dots .good { background: #34D399; }
+    .pro-dots .bad { background: #F87171; }
+    .pro-coach p { font-size: .9rem; line-height: 1.55; color: #CBD5E1; }
+    .pro-coach p + p { margin-top: .45rem; }
+    .pro-coach strong { color: #fff; }
+    .pro-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    .pro-table th, .pro-table td { padding: .5rem .6rem; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, .06); }
+    .pro-table thead th { color: #fff; font-weight: 600; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pro-table tbody th { color: #A3ACBB; font-weight: 500; white-space: nowrap; }
+    .pro-win { color: #34D399; font-weight: 700; }
+    .pro-input { flex: 1 1 14rem; min-width: 0; padding: .55rem .8rem; border-radius: .6rem; font-size: .85rem; color: #fff; background: #08090D; border: 1px solid rgba(255, 255, 255, .1); }
+    .pro-input:focus { outline: 0; border-color: #F0444F; }
+    #pro-toast { position: fixed; left: 50%; bottom: 1.5rem; z-index: 60; transform: translate(-50%, 1rem); max-width: calc(100vw - 2rem); padding: .6rem 1rem; border-radius: .7rem; font-size: .85rem; color: #fff; background: #1A1D29; border: 1px solid rgba(255, 255, 255, .12); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
+    #pro-toast.show { opacity: 1; transform: translate(-50%, 0); }
+    @media (prefers-reduced-motion: reduce) { .pro-track i, .pro-grade, #pro-toast { transition: none; } }
+
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
 
@@ -294,7 +367,7 @@
           </h1>
 
           <p class="text-slate-400 text-sm leading-relaxed max-w-lg mx-auto">
-            Введи ник, ID или ссылку на Steam. Оценка ПТС, разбор каждой смерти и план на следующие игры. Бесплатно и без входа.
+            Введи ник, ID или ссылку на Steam. Оценка ПТС, разбор каждой смерти, сравнение с другими игроками и план на следующие игры. Бесплатно и без входа.
           </p>
 
           </div>
@@ -321,6 +394,8 @@
               <span>•</span>
               <button onclick="fillId('86745912')" class="hover:text-uc-red transition-colors">Arteezy</button>
             </div>
+            <div id="recent-players" class="hidden flex flex-wrap items-center justify-center gap-2 mt-3 text-[13px] text-slate-400"></div>
+            <button id="install-btn" type="button" onclick="proInstall()" class="hidden pro-link mt-3">Установить сайт как приложение</button>
           </div>
         </div>
       </div>
@@ -386,11 +461,15 @@
 
       <!-- ═══════ RESULTS DASHBOARD ═══════ -->
       <div id="results" class="hidden space-y-6">
-        <div id="player-header" class="flex items-center gap-3">
+        <div id="player-header" class="flex flex-wrap items-center gap-3">
           <img id="player-avatar" src="" alt="" class="w-12 h-12 rounded-xl object-cover hidden">
           <div class="min-w-0">
             <h2 id="player-name" class="font-outfit font-bold text-xl text-white truncate"></h2>
             <p id="player-sub" class="text-sm text-slate-400"></p>
+          </div>
+          <div id="pro-share" class="pro-actions hidden">
+            <button type="button" class="pro-btn" onclick="proShareCard()">Картинка для друзей</button>
+            <button type="button" class="pro-btn" onclick="proCopyProfileLink()">Ссылка на профиль</button>
           </div>
         </div>
 
@@ -521,6 +600,30 @@
           <h3 class="font-outfit font-bold text-lg text-white">Форма по матчам</h3>
           <p id="form-note" class="text-sm text-slate-400"></p>
           <div style="height:170px"><canvas id="form-chart"></canvas></div>
+          <div id="grade-strip" class="hidden space-y-2"></div>
+        </div>
+
+        <div id="goal-box" class="hidden glass rounded-2xl p-6 space-y-3 border-uc-red/25"></div>
+
+        <div id="bench-card" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-4">
+          <div>
+            <h3 class="font-outfit font-bold text-lg text-white">Твой уровень на героях</h3>
+            <p class="text-sm text-slate-400">Сравнение с публичными матчами на этом герое по данным OpenDota. Турбо не учтено.</p>
+          </div>
+          <div id="bench-heroes" class="flex gap-2 overflow-x-auto pb-1"></div>
+          <div id="bench-bars" class="pro-bars"></div>
+        </div>
+
+        <div id="meta-card" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-4">
+          <div>
+            <h3 id="meta-title" class="font-outfit font-bold text-lg text-white">Герои на твоём ранге</h3>
+            <p class="text-sm text-slate-400">Винрейты героев за последнее время по данным OpenDota.</p>
+          </div>
+          <div class="pro-meta">
+            <div><h4>Твои герои против всех игроков</h4><div id="meta-mine"></div></div>
+            <div><h4 id="meta-strong-title">Сильные герои</h4><div id="meta-strong"></div></div>
+            <div id="meta-pro-box"><h4>Чаще всего на турнирах</h4><div id="meta-pro"></div></div>
+          </div>
         </div>
 
         <div class="glass rounded-2xl p-6 border-uc-red/25 space-y-4">
@@ -615,6 +718,19 @@
           <div class="max-w-md mx-auto">
             <canvas id="radar-chart"></canvas>
           </div>
+          <p id="radar-note" class="text-sm text-slate-400 text-center"></p>
+        </div>
+
+        <div id="compare-card" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-4">
+          <div>
+            <h3 class="font-outfit font-bold text-lg text-white">Сравнить с другом</h3>
+            <p class="text-sm text-slate-400">Вставь ID друга или ссылку на его Steam: сайт сравнит ваши последние игры.</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <input id="compare-input" type="text" class="pro-input" placeholder="ID или ссылка на Steam" aria-label="ID друга" onkeypress="if(event.key==='Enter') proCompare()">
+            <button id="compare-btn" type="button" class="pro-btn" onclick="proCompare()">Сравнить</button>
+          </div>
+          <div id="compare-result" class="space-y-3"></div>
         </div>
 
         <!-- Daily Tip -->
@@ -744,6 +860,20 @@
               <div id="rp-grade-sub" class="text-[13px] text-slate-400 font-mono">—</div>
             </div>
           </div>
+        </div>
+
+        <div id="rp-coach" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-3 border-uc-red/25">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 class="font-outfit font-bold text-lg text-white">Разбор тренера</h3>
+              <p id="rp-coach-label" class="text-xs text-slate-400"></p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <button id="rp-coach-ai" type="button" class="hidden pro-btn" onclick="proAskCoach()">Спросить нейросеть</button>
+              <button type="button" class="pro-link" onclick="proCopyMatchLink()">Ссылка на разбор</button>
+            </div>
+          </div>
+          <div id="rp-coach-body" class="pro-coach" aria-live="polite"></div>
         </div>
 
         <!-- ═══════ KEY VERDICT BANNER (ПОЧЕМУ ПРОИГРАЛИ / ВЫИГРАЛИ) ═══════ -->
@@ -916,6 +1046,11 @@
               <span>—</span>
             </div>
           </div>
+        </div>
+
+        <div id="rp-bench" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-4">
+          <h3 id="rp-bench-title" class="font-outfit font-bold text-lg text-white"></h3>
+          <div id="rp-bench-bars" class="pro-bars"></div>
         </div>
 
         <!-- Death Timeline -->
@@ -1217,7 +1352,9 @@
     <p>Данные: OpenDota API. Не модифицирует файлы игры.</p>
   </footer>
 
+  <div id="pro-toast" role="status" aria-live="polite"></div>
   <script src="app.js"></script>
+  <script src="pro.js"></script>
   <script>refreshIcons();</script>
 </body>
 </html>

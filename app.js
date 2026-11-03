@@ -672,6 +672,7 @@ async function analyzePlayer() {
     }
 
     renderNoHistory(pData);
+    if (typeof proOnResults === 'function') proOnResults();
   } catch (err) {
     if (token !== scanToken) return;
     setScanning(false);
@@ -695,6 +696,7 @@ function showPlayerResults(profile, matches) {
   renderPlayerHeader(profile, matches.length);
   renderDashboard(profile, matches);
   renderReplayView(matches[0]);
+  if (typeof proOnResults === 'function') proOnResults();
 }
 
 async function showNameSearch(query, token) {
@@ -1078,7 +1080,9 @@ function renderDashboard(profile, matches) {
   renderMatchesTable(matches);
 
   // Radar Chart
-  renderRadarChart(avgGPM, avgDeaths, avgKDA, avgTD, avgXPM, winrate);
+  renderRadarChart(matches);
+
+  if (typeof proOnDashboard === 'function') proOnDashboard(profile, matches, skill, audit);
 
   refreshIcons();
 }
@@ -1329,7 +1333,7 @@ function buildPlayerAudit(matches, skill) {
     const gap = metric.lowerIsBetter ? (value - goal) / goal : (goal - value) / goal;
     const shown = value.toFixed(metric.digits);
     return gap > 0
-      ? { level: 'bad', gap, title: metric.title, fact: metric.fact(shown, goal, rankName), advice: metric.advice }
+      ? { level: 'bad', gap, metricKey: metric.key, goal, title: metric.title, fact: metric.fact(shown, goal, rankName), advice: metric.advice }
       : { level: 'good', title: `${metric.good} в норме`, fact: metric.fact(shown, goal, rankName), advice: 'Держи этот уровень.' };
   });
 
@@ -1571,7 +1575,26 @@ function renderMatchesTable(matches) {
 // RADAR CHART (CHART.JS)
 // ═══════════════════════════════════════════════════════════════════════
 
-function renderRadarChart(gpm, deaths, kda, td, xpm, wr) {
+function radarScores(games) {
+  const kills = games.reduce((sum, m) => sum + (m.kills || 0), 0);
+  const assists = games.reduce((sum, m) => sum + (m.assists || 0), 0);
+  const deaths = games.reduce((sum, m) => sum + (m.deaths || 0), 0);
+  const gpm = average(games.map(m => m.gold_per_min || 0));
+  const xpm = average(games.map(m => m.xp_per_min || 0));
+  const td = average(games.map(m => m.tower_damage || 0));
+  const wins = games.filter(wonMatch).length;
+  return [
+    Math.min(100, Math.round((gpm / 680) * 100)),
+    Math.max(0, Math.min(100, Math.round((1 - (deaths / games.length / 12)) * 100))),
+    Math.min(100, Math.round((((kills + assists) / Math.max(1, deaths)) / 4) * 100)),
+    Math.min(100, Math.round((td / 4200) * 100)),
+    Math.min(100, Math.round((xpm / 750) * 100)),
+    Math.round((wins / games.length) * 100)
+  ];
+}
+
+// Сравниваем игрока с ним самим: новые игры против старых. Эталонов рангов с точными цифрами у нас нет.
+function renderRadarChart(matches) {
   const canvas = document.getElementById('radar-chart');
   if (!canvas || typeof Chart === 'undefined') return;
 
@@ -1579,17 +1602,18 @@ function renderRadarChart(gpm, deaths, kda, td, xpm, wr) {
     radarChartInstance.destroy();
   }
 
-  const userScores = [
-    Math.min(100, Math.round((gpm / 680) * 100)),
-    Math.max(0, Math.min(100, Math.round((1 - (deaths / 12)) * 100))),
-    Math.min(100, Math.round((kda / 4.0) * 100)),
-    Math.min(100, Math.round((td / 4200) * 100)),
-    Math.min(100, Math.round((xpm / 750) * 100)),
-    wr
-  ];
-
-  const crusaderScores = [78, 72, 70, 68, 75, 55];
-  const heraldScores = [42, 38, 40, 26, 45, 45];
+  const games = pickScoredMatches(matches).filter(m => m.gold_per_min > 0);
+  if (games.length === 0) return;
+  const half = Math.floor(games.length / 2);
+  const hasProgress = games.length >= 6;
+  const recent = hasProgress ? games.slice(0, half) : games;
+  const older = hasProgress ? games.slice(half) : [];
+  const note = document.getElementById('radar-note');
+  if (note) {
+    note.textContent = hasProgress
+      ? `Чем дальше от центра, тем лучше. Красным ${recent.length} последних игр, серым ${older.length} игр до них.`
+      : 'Чем дальше от центра, тем лучше. Для сравнения с прошлыми играми нужно хотя бы 6 матчей.';
+  }
 
   radarChartInstance = new Chart(canvas, {
     type: 'radar',
@@ -1597,30 +1621,22 @@ function renderRadarChart(gpm, deaths, kda, td, xpm, wr) {
       labels: ['Фарм (GPM)', 'Выживаемость', 'KDA', 'Снос вышек', 'Опыт (XPM)', 'Винрейт'],
       datasets: [
         {
-          label: 'Твой перформанс',
-          data: userScores,
+          label: 'Последние игры',
+          data: radarScores(recent),
           backgroundColor: 'rgba(255, 42, 66, 0.25)',
           borderColor: '#FF2A42',
           pointBackgroundColor: '#FF2A42',
           borderWidth: 2
         },
-        {
-          label: 'Эталон Рыцаря (1800 MMR)',
-          data: crusaderScores,
-          backgroundColor: 'rgba(245, 158, 11, 0.1)',
-          borderColor: '#F59E0B',
-          pointBackgroundColor: '#F59E0B',
+        ...(older.length > 0 ? [{
+          label: 'Игры до них',
+          data: radarScores(older),
+          backgroundColor: 'rgba(100, 116, 139, 0.12)',
+          borderColor: '#94A3B8',
+          pointBackgroundColor: '#94A3B8',
           borderWidth: 1.5,
           borderDash: [4, 4]
-        },
-        {
-          label: 'Средний Рекрут (500 MMR)',
-          data: heraldScores,
-          backgroundColor: 'rgba(100, 116, 139, 0.08)',
-          borderColor: '#64748B',
-          pointBackgroundColor: '#64748B',
-          borderWidth: 1
-        }
+        }] : [])
       ]
     },
     options: {
@@ -1859,6 +1875,7 @@ function renderReplayDetails(m, isWin) {
   renderLiveDeaths(m);
   renderHeroSpecificTips(m.hero_id);
   renderActiveProModule(currentActiveProModule, m);
+  if (typeof proOnReplay === 'function') proOnReplay(m);
   refreshIcons();
 }
 
