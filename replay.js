@@ -26,6 +26,15 @@ const REPLAY_ROSHAN_CELLS = 15;
 const REPLAY_CLUSTER_SHARE = 2.2;
 const REPLAY_HP_BEFORE = 5;
 const REPLAY_PIN = 6;
+const REPLAY_TURNS_SHOWN = 3;
+const REPLAY_TURN_BEFORE = 1;
+const REPLAY_TURN_AFTER = 2;
+const REPLAY_TURN_EVEN = 6000;
+const REPLAY_TURN_GAP = 180;
+const REPLAY_TURN_CELLS = 25;
+const REPLAY_TURN_SWING = 1500;
+const REPLAY_TURN_FOLLOW = 120;
+const REPLAY_LANE_LEAD = 2000;
 const REPLAY_HEAL_ITEMS = {
   magic_stick: 'Мгновенное лечение: жми его, как только начали бить, а не на последних процентах.',
   magic_wand: 'Мгновенное лечение: жми его, как только начали бить, а не на последних процентах.',
@@ -305,7 +314,7 @@ function replayDeathStory(row, focus, near) {
     category: 'fight',
     headline: 'Смерть в драке',
     text: `Погиб от ${killer}: ${row.zone.toLowerCase()}.`,
-    coach: 'Посмотри этот момент в игре: возможно, это был нужный размен.'
+    coach: 'Заранее посчитай размен: если враг получает больше, чем ты, в такую драку лучше не заходить.'
   };
 }
 
@@ -479,6 +488,144 @@ function momentHtml(moment, heading, button) {
     </div>`;
 }
 
+// ─── Что могло изменить игру ────────────────────────────────────────────
+
+function replayLead(minute) {
+  const leads = (replay.match.details && replay.match.details.leads) || [];
+  if (leads.length === 0) return null;
+  const value = leads[Math.max(0, Math.min(leads.length - 1, Math.round(minute)))];
+  if (value == null) return null;
+  return replay.viewer.player_slot < 128 ? value : -value;
+}
+
+function replayLeadText(value) {
+  return `${value < 0 ? '−' : '+'}${analystThousands(value)}`;
+}
+
+// Смерти идут подряд с разрывом меньше окна драки: это одна драка
+function replayFightGroups() {
+  const groups = [];
+  replay.deaths.slice().sort((a, b) => a.time - b.time).forEach(row => {
+    const last = groups[groups.length - 1];
+    if (last && row.time - last.to <= REPLAY_FIGHT_WINDOW) {
+      last.to = row.time;
+      last.rows.push(row);
+    } else {
+      groups.push({ from: row.time, to: row.time, rows: [row] });
+    }
+  });
+  return groups.map(group => ({ ...group, ours: group.rows.filter(row => row.ally), theirs: group.rows.filter(row => !row.ally) }));
+}
+
+function replayAbsent(group, side) {
+  const first = (group.ours[0] || group.rows[0]).raw;
+  return side.allies.filter(player => {
+    if (group.ours.some(row => row.hero === player.hero_id) || replayIsDead(replay.deaths, player.hero_id, group.from)) return false;
+    const cell = replayPosition(replay.heroes[player.hero_id], group.from);
+    return cell && Math.hypot(cell.x - first.positionX, cell.y - first.positionY) > REPLAY_TURN_CELLS;
+  });
+}
+
+function replayLostFightTurn(group, side, score) {
+  const absent = replayAbsent(group, side);
+  const until = group.to + REPLAY_TURN_FOLLOW;
+  const fell = replay.buildings.filter(item => item.died != null && item.died >= group.from && item.died <= until
+    && item.radiant === side.radiant && item.type !== 'OUTPOST' && item.type !== 'FORT').length;
+  const roshan = replay.roshan.deaths.some(([time]) => time >= group.from && time <= until);
+  const fixes = [];
+  if (absent.length > 0) fixes.push(`Собраться вместе: ${replayNames(absent)} ${absent.length > 1 ? 'были' : 'был'} далеко. Без них в драку заходить не стоило.`);
+  if (roshan) fixes.push('Сразу после драки враг забрал Рошана: нужен был выкуп или отход к логову заранее.');
+  if (fell > 0) fixes.push(`После драки упало зданий: ${fell}. Нужен был выкуп, чтобы защитить их.`);
+  if (fixes.length === 0) fixes.push('Перед дракой проверить, готовы ли главные умения и предметы. Если нет, отойти к вышке и дождаться команды.');
+  return {
+    tone: 'bad',
+    what: `Умерли: ${group.ours.map(row => getHeroName(row.hero)).join(', ')}. Счёт драки ${group.theirs.length}:${group.ours.length}.`,
+    title: 'Проигранная драка',
+    fix: fixes.slice(0, 2).join(' '),
+    ...score
+  };
+}
+
+function replayWonFightTurn(group, side, score) {
+  const together = side.allies.filter(player => !replayAbsent(group, side).includes(player)).length;
+  return {
+    tone: 'good',
+    title: 'Выигранная драка',
+    what: `Убили: ${group.theirs.map(row => getHeroName(row.hero)).join(', ')}. Счёт драки ${group.theirs.length}:${group.ours.length}.`,
+    fix: `Команда дралась вместе: рядом было героев ${together}. Так и нужно заходить.`,
+    ...score
+  };
+}
+
+function replayLaneTurn(side) {
+  const lead = replayLead(10);
+  const worst = caseLaneRows(replay.match, side)[0];
+  if (lead == null || lead > -REPLAY_LANE_LEAD || !worst || worst.gap >= 0) return null;
+  return {
+    time: 600,
+    weight: Math.abs(lead),
+    tone: 'bad',
+    title: 'Линии к 10 минуте',
+    what: `${getHeroName(worst.player.hero_id)} отстал от ${getHeroName(worst.rival.hero_id)} на ${Math.abs(worst.gap).toLocaleString()} золота.`,
+    fix: 'Помочь этой линии, пока отрыв маленький: прийти с соседней линии или сменить её.',
+    gain: `Отрыв команды к 10 минуте: ${replayLeadText(lead)}.`
+  };
+}
+
+function buildReplayTurns() {
+  if (!replay.heroes) return { won: false, turns: [] };
+  const side = analystSide(replay.match, replay.viewer);
+  const direction = side.won ? 1 : -1;
+  const candidates = replayFightGroups().map(group => {
+    const decisive = side.won ? group.theirs.length > group.ours.length : group.ours.length > group.theirs.length;
+    const before = replayLead(group.from / 60 - REPLAY_TURN_BEFORE);
+    const after = replayLead(group.to / 60 + REPLAY_TURN_AFTER);
+    if (!decisive || before == null || after == null) return null;
+    const swing = (after - before) * direction;
+    if (swing < REPLAY_TURN_SWING) return null;
+    const even = Math.abs(before) <= REPLAY_TURN_EVEN;
+    const score = {
+      time: group.from,
+      weight: swing * (even ? 1.4 : 1),
+      gain: even
+        ? `До драки игра была равной (${replayLeadText(before)}), после ${replayLeadText(after)}. ${side.won ? 'Здесь игра качнулась к вам.' : 'Здесь её ещё можно было удержать.'}`
+        : `Отрыв изменился с ${replayLeadText(before)} до ${replayLeadText(after)}.`
+    };
+    return side.won ? replayWonFightTurn(group, side, score) : replayLostFightTurn(group, side, score);
+  }).filter(Boolean);
+  if (!side.won) candidates.push(replayLaneTurn(side));
+
+  const picked = [];
+  candidates.filter(Boolean).sort((a, b) => b.weight - a.weight).forEach(turn => {
+    if (picked.length < REPLAY_TURNS_SHOWN && picked.every(other => Math.abs(other.time - turn.time) >= REPLAY_TURN_GAP)) picked.push(turn);
+  });
+  return { won: side.won, turns: picked.sort((a, b) => a.time - b.time) };
+}
+
+function replayTurnsHtml() {
+  const { won, turns } = buildReplayTurns();
+  if (turns.length === 0) return '';
+  return `
+    <div class="rm-turns">
+      <h4>${won ? 'Что принесло победу' : 'Что могло изменить игру'}</h4>
+      <div class="rm-turn-list">
+        ${turns.map(turn => `
+          <button type="button" class="rm-turn ${turn.tone}" onclick="replayGoTo(${turn.time})">
+            <span class="rm-turn-head"><strong>${esc(formatClock(turn.time))}</strong> ${esc(turn.title)}</span>
+            <span>${esc(turn.what)}</span>
+            <span><b>${won ? 'Почему сработало:' : 'Что нужно было сделать:'}</b> ${esc(turn.fix)}</span>
+            <small>${esc(turn.gain)}</small>
+          </button>`).join('')}
+      </div>
+    </div>`;
+}
+
+function replayGoTo(time) {
+  replayStop();
+  replaySeek(Math.max(replay.start, time));
+  document.querySelector('.rm-stage').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 // ─── Лента моментов ─────────────────────────────────────────────────────
 
 function replayMomentHtml(moment, index) {
@@ -488,7 +635,7 @@ function replayMomentHtml(moment, index) {
       <div class="rm-body">
         <h4>${esc(moment.headline)}</h4>
         <p>${esc(moment.text)}</p>
-        <p class="rm-coach"><b>Коуч:</b> ${esc(moment.coach)}</p>
+        <p class="rm-coach"><b>${moment.tone === 'good' ? 'Почему это хорошо:' : 'Что нужно было сделать:'}</b> ${esc(moment.coach)}</p>
       </div>
     </article>`;
 }
@@ -620,6 +767,7 @@ function replayRefreshPins() {
 function renderReplayShell() {
   const box = document.getElementById('rp-replay-stage');
   box.innerHTML = `
+    <div id="rm-turns"></div>
     <div class="rm-grid">
       <div class="rm-stage">
         <div class="rm-map">
@@ -660,6 +808,7 @@ function renderReplayShell() {
         <p class="text-xs text-slate-400">Советы составлены по данным реплея. Туман войны и позиции примерные: точки идут раз в 5 секунд.</p>
       </div>
     </div>`;
+  document.getElementById('rm-turns').innerHTML = replayTurnsHtml();
   replay.drawnBuildings = '';
   replay.drawnWards = '';
   replayRefreshPins();

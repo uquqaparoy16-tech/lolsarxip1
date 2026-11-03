@@ -2573,6 +2573,11 @@ function buildMatchMistakes(match, viewer) {
   const enemies = match.players.filter(p => (p.player_slot < 128) !== isRadiant);
   const mistakes = [];
   const good = [];
+  const fixes = {};
+  const withFix = (text, fix) => {
+    fixes[text] = fix;
+    return text;
+  };
 
   const teamKills = team.reduce((sum, p) => sum + (p.kills || 0), 0);
   const teamDeaths = team.reduce((sum, p) => sum + (p.deaths || 0), 0);
@@ -2580,14 +2585,14 @@ function buildMatchMistakes(match, viewer) {
   const deaths = viewer.deaths || 0;
 
   if (deaths >= 6 && deaths >= allyDeaths * 1.3) {
-    mistakes.push(`${deaths} смертей: у союзников в среднем ${allyDeaths.toFixed(1)}. Это ${Math.round((deaths / Math.max(1, teamDeaths)) * 100)}% всех смертей команды.`);
+    mistakes.push(withFix(`${deaths} смертей: у союзников в среднем ${allyDeaths.toFixed(1)}. Это ${Math.round((deaths / Math.max(1, teamDeaths)) * 100)}% всех смертей команды.`, `Держать не больше ${Math.ceil(allyDeaths)} смертей: перед заходом смотреть, кого из врагов нет на карте.`));
   } else if (deaths <= allyDeaths * 0.6) {
     good.push(`${deaths} смертей: у союзников в среднем ${allyDeaths.toFixed(1)}.`);
   }
 
   if (teamKills > 0) {
     const share = Math.round((((viewer.kills || 0) + (viewer.assists || 0)) / teamKills) * 100);
-    if (share < 45) mistakes.push(`Участие в убийствах команды только ${share}%: тебя часто не было в драках.`);
+    if (share < 45) mistakes.push(withFix(`Участие в убийствах команды только ${share}%: тебя часто не было в драках.`, 'Когда союзники собираются, идти к ним, а не фармить на другом конце карты.'));
     else if (share >= 65) good.push(`Участие в убийствах команды ${share}%.`);
   }
 
@@ -2600,7 +2605,7 @@ function buildMatchMistakes(match, viewer) {
   if (rival && rival.gold_per_min > 0 && viewer.gold_per_min > 0) {
     const name = getHeroName(rival.hero_id);
     if (viewer.gold_per_min < rival.gold_per_min * 0.85) {
-      mistakes.push(`${viewer.gold_per_min} GPM против ${rival.gold_per_min} у ${name}, ${rivalLabel}.`);
+      mistakes.push(withFix(`${viewer.gold_per_min} GPM против ${rival.gold_per_min} у ${name}, ${rivalLabel}.`, `Найти ещё ${rival.gold_per_min - viewer.gold_per_min} золота в минуту: между драками забирать волны и лагеря, а не стоять без дела.`));
     } else if (viewer.gold_per_min > rival.gold_per_min * 1.15) {
       good.push(`${viewer.gold_per_min} GPM против ${rival.gold_per_min} у ${name}, ${rivalLabel}.`);
     }
@@ -2611,34 +2616,34 @@ function buildMatchMistakes(match, viewer) {
     ? !/поддержка/i.test(myPosition)
     : !isHeroSupport(viewer.hero_id, viewer.gold_per_min || 0, viewer.assists || 0, viewer.kills || 0);
   if (core && match.duration >= 1500 && (viewer.tower_damage || 0) < 500) {
-    mistakes.push(`Только ${(viewer.tower_damage || 0).toLocaleString()} урона по вышкам за ${formatMatchDuration(match.duration)} на кор-позиции.`);
+    mistakes.push(withFix(`Только ${(viewer.tower_damage || 0).toLocaleString()} урона по вышкам за ${formatMatchDuration(match.duration)} на кор-позиции.`, 'После каждой выигранной драки сразу идти на вышку: она даёт золото всей команде.'));
   }
 
   const detail = playerDetail(match, viewer);
   if (detail) {
     const lane = laneResult(match, viewer);
     const where = LANE_NAMES[detail.lane] || 'линии';
-    if (lane === 'loss') mistakes.unshift(`Проиграна стадия линий на ${where}.`);
+    if (lane === 'loss') mistakes.unshift(withFix(`Проиграна стадия линий на ${where}.`, 'Стоять дальше от врага, добивать крипов у своей вышки и звать помощь, пока отрыв маленький.'));
     if (lane === 'win') good.push(`Выиграна стадия линий на ${where}.`);
 
     const early = detail.deaths.filter(d => d.time < 600).length;
-    if (early >= 2) mistakes.push(`${early} смерти в первые 10 минут: враг рано получил золото и темп.`);
+    if (early >= 2) mistakes.push(withFix(`${early} смерти в первые 10 минут: враг рано получил золото и темп.`, 'До 10 минуты не заходить за своих крипов, пока не видно всех врагов.'));
 
     const fast = detail.deaths.filter(d => d.isBurst).length;
-    if (fast >= 3) mistakes.push(`${fast} раз убили за секунды: нужен предмет на выживание или позиция дальше от врага.`);
+    if (fast >= 3) mistakes.push(withFix(`${fast} раз убили за секунды: нужен предмет на выживание или позиция дальше от врага.`, 'Купить предмет на выживание раньше и не стоять первым в начале драки.'));
 
     const unused = detail.deaths.filter(d => d.hasHealAvailable).length;
-    if (unused >= 2) mistakes.push(`${unused} раза умер с доступным лечением: нажимай его раньше.`);
+    if (unused >= 2) mistakes.push(withFix(`${unused} раза умер с доступным лечением: нажимай его раньше.`, 'Нажимать лечение, как только начали бить, а не на последних процентах.'));
 
     const lost = detail.deaths.reduce((sum, d) => sum + (d.goldLost || 0), 0);
-    if (lost >= 1500) mistakes.push(`Потеряно ${lost.toLocaleString()} золота на смертях.`);
+    if (lost >= 1500) mistakes.push(withFix(`Потеряно ${lost.toLocaleString()} золота на смертях.`, 'Перед дракой тратить золото: купить предмет или оставить на выкуп.'));
 
     const kicks = detail.kills.filter(k => k.isSolo).length;
     if (kicks >= 3) good.push(`${kicks} соло-убийств.`);
     if (detail.award && AWARD_NAMES[detail.award]) good.unshift(`Награда матча: ${AWARD_NAMES[detail.award]}.`);
   }
 
-  return { mistakes, good };
+  return { mistakes, good, fixes };
 }
 
 function renderMatchMistakes(m) {
@@ -2651,8 +2656,8 @@ function renderMatchMistakes(m) {
     return;
   }
 
-  const { mistakes, good } = buildMatchMistakes(live.match, live.player);
-  const row = (text, bad) => `<div class="p-3 rounded-xl bg-black/40 border ${bad ? 'border-rose-500/30 text-rose-200' : 'border-emerald-500/30 text-emerald-200'} text-xs">${bad ? '❌' : '✅'} ${esc(text)}</div>`;
+  const { mistakes, good, fixes } = buildMatchMistakes(live.match, live.player);
+  const row = (text, bad) => `<div class="p-3 rounded-xl bg-black/40 border ${bad ? 'border-rose-500/30 text-rose-200' : 'border-emerald-500/30 text-emerald-200'} text-xs">${bad ? '❌' : '✅'} ${esc(text)}${fixes[text] ? `<span class="block mt-1 text-slate-200"><strong class="text-amber-200">Что нужно было сделать:</strong> ${esc(fixes[text])}</span>` : ''}</div>`;
   box.innerHTML = mistakes.length + good.length > 0
     ? mistakes.map(t => row(t, true)).join('') + good.map(t => row(t, false)).join('')
     : liveNotice('В цифрах этого матча явных ошибок нет: показатели близки к команде и сопернику.');

@@ -258,6 +258,16 @@
     .rm-square { position: absolute; top: .35rem; width: .32rem; height: .32rem; margin-left: -.16rem; border-radius: .08rem; }
     .rm-square.ally { background: #34D399; }
     .rm-square.enemy { background: #F87171; }
+    .rm-turns { margin-bottom: 1.1rem; }
+    .rm-turns h4 { margin-bottom: .5rem; font-size: 1rem; font-weight: 700; color: #fff; }
+    .rm-turn-list { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); }
+    .rm-turn { display: grid; gap: .3rem; align-content: start; padding: .7rem .8rem; text-align: left; font-size: .82rem; line-height: 1.4; color: #CBD5E1; border-radius: .7rem; background: rgba(0, 0, 0, .35); border: 1px solid rgba(255, 255, 255, .07); border-left: 3px solid #F87171; }
+    .rm-turn.good { border-left-color: #34D399; }
+    .rm-turn:hover { border-color: rgba(253, 224, 71, .5); }
+    .rm-turn-head { font-size: .9rem; font-weight: 700; color: #fff; }
+    .rm-turn-head strong { margin-right: .3rem; font-family: ui-monospace, monospace; color: #FDE047; }
+    .rm-turn b { color: #FDE047; font-weight: 700; }
+    .rm-turn small { font-size: .74rem; color: #A3ACBB; }
     .rm-tools { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
     .rm-feed { display: grid; gap: .25rem; }
     .rm-item { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: .75rem; padding: .85rem .6rem; border-top: 1px solid rgba(255, 255, 255, .07); border-radius: .5rem; cursor: pointer; opacity: .72; transition: opacity .15s, background .15s; }
@@ -1144,7 +1154,7 @@
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="min-w-0">
               <h3 class="font-outfit font-bold text-lg text-white">Разбор на карте</h3>
-              <p class="text-sm text-slate-400">Каждый момент с таймкодом: нажми на него, и карта покажет эту секунду.</p>
+              <p class="text-sm text-slate-400">Что нужно было сделать в каждый момент. Нажми на него, и карта покажет эту секунду.</p>
             </div>
             <button id="rp-replay-load" type="button" class="pro-btn" onclick="replayLoadCurrent()">Загрузить карту</button>
           </div>
