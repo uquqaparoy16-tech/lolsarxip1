@@ -969,6 +969,8 @@ function proOnReplay(m) {
   renderCoach(m);
   if (typeof renderAnalyst === 'function') renderAnalyst(m);
   if (typeof renderBoard === 'function') renderBoard(m);
+  if (typeof renderMatchStoryBlock === 'function') renderMatchStoryBlock(m);
+  if (typeof renderReplayCard === 'function') renderReplayCard(m);
   renderReplayBench(m);
 }
 

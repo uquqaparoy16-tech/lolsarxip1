@@ -29,6 +29,8 @@ const STATIC_FILES = {
   '/analyst.js': 'analyst.js',
   '/stats.js': 'stats.js',
   '/map.js': 'map.js',
+  '/case.js': 'case.js',
+  '/replay.js': 'replay.js',
   '/styles.css': 'styles.css',
   '/sw.js': 'sw.js',
   '/manifest.webmanifest': 'manifest.webmanifest',

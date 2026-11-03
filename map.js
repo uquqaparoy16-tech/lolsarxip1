@@ -3,10 +3,10 @@
 // Карта матча: своя схема Dota 2 (не картинка из игры), герои в местах смертей и список «кто, где, когда».
 // Координаты из STRATZ лежат в игровой сетке, а башни заданы мировыми координатами и переводятся в неё.
 
-const MAP_MIN = 70;
-const MAP_SIZE = 116;
+const MAP_MIN = 62; // игровая сетка STRATZ: герои ходят от 62 до 192
+const MAP_SIZE = 130;
 const MAP_RIVER_WIDTH = 7;
-const MAP_LANE_EDGE = 18;
+const MAP_LANE_EDGE = 22;
 const MAP_MID_WIDTH = 10;
 const MAP_BASE_RADIUS = 20;
 const MAP_PHASES = [
@@ -58,8 +58,8 @@ function enemyHalfShare(points) {
 
 // Названия примерные: граница линии и леса на схеме условная
 function mapZone(x, y) {
-  if (Math.hypot(x - 10, y - 90) < MAP_BASE_RADIUS) return 'База Сил Света';
-  if (Math.hypot(x - 90, y - 10) < MAP_BASE_RADIUS) return 'База Сил Тьмы';
+  if (Math.hypot(x - 15, y - 85) < MAP_BASE_RADIUS) return 'База Сил Света';
+  if (Math.hypot(x - 85, y - 15) < MAP_BASE_RADIUS) return 'База Сил Тьмы';
   if (Math.abs(x - y) < MAP_RIVER_WIDTH) return 'Река';
   if (x < MAP_LANE_EDGE || y < MAP_LANE_EDGE) return 'Верхняя линия';
   if (x > 100 - MAP_LANE_EDGE || y > 100 - MAP_LANE_EDGE) return 'Нижняя линия';
@@ -99,17 +99,17 @@ function mapBackground(id) {
     </g>
     <path d="M-2 4 C 16 12, 26 26, 36 34 S 62 62, 70 70 S 88 90, 102 98" fill="none" stroke="url(#${id}-river)" stroke-width="6" stroke-linecap="round" stroke-opacity=".9"/>
     <g fill="none" stroke="#C9B48A" stroke-opacity=".5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M10 88 L9 12 L12 9 L88 9"/>
-      <path d="M12 90 L88 91 L91 88 L91 12"/>
-      <path d="M14 86 L86 14"/>
+      <path d="M14 84 L13 16 L16 13 L84 13"/>
+      <path d="M16 86 L84 87 L87 84 L87 16"/>
+      <path d="M19 81 L81 19"/>
     </g>
     ${mapTowers(MAP_TOWERS.radiant, '#6EE7B7')}${mapTowers(MAP_TOWERS.dire, '#FCA5A5')}
-    <circle cx="10" cy="90" r="9" fill="url(#${id}-good)" fill-opacity=".55"/>
-    <circle cx="90" cy="10" r="9" fill="url(#${id}-bad)" fill-opacity=".55"/>
-    <rect x="8" y="88" width="4" height="4" rx=".8" fill="#34D399" stroke="#0A0B10" stroke-width=".4"/>
-    <rect x="88" y="8" width="4" height="4" rx=".8" fill="#F87171" stroke="#0A0B10" stroke-width=".4"/>
-    <text x="16" y="96.5" class="map-label">Силы Света</text>
-    <text x="84" y="5.5" class="map-label" text-anchor="end">Силы Тьмы</text>`;
+    <circle cx="15" cy="85" r="11" fill="url(#${id}-good)" fill-opacity=".55"/>
+    <circle cx="85" cy="15" r="11" fill="url(#${id}-bad)" fill-opacity=".55"/>
+    <rect x="13" y="83" width="4" height="4" rx=".8" fill="#34D399" stroke="#0A0B10" stroke-width=".4"/>
+    <rect x="83" y="13" width="4" height="4" rx=".8" fill="#F87171" stroke="#0A0B10" stroke-width=".4"/>
+    <text x="22" y="97" class="map-label">Силы Света</text>
+    <text x="78" y="5" class="map-label" text-anchor="end">Силы Тьмы</text>`;
 }
 
 // Карта с точками: для сводки по всем матчам

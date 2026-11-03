@@ -185,6 +185,27 @@
     .draft-edge { padding: .45rem .6rem; border-radius: .5rem; font-size: .85rem; font-weight: 600; background: rgba(0, 0, 0, .35); }
     .draft-edge.good { color: #34D399; }
     .draft-edge.bad { color: #F87171; }
+    .case-why h4, .case-title { margin-bottom: .4rem; font-size: .9rem; font-weight: 700; color: #fff; }
+    .case-list { display: grid; gap: .25rem; }
+    .case-list.scroll { max-height: 22rem; overflow-y: auto; padding-right: .2rem; }
+    .case-row { display: grid; grid-template-columns: 4.3rem minmax(0, 1fr); gap: .5rem; width: 100%; padding: .4rem .55rem; border-radius: .5rem; text-align: left; font-size: .82rem; line-height: 1.4; color: #CBD5E1; background: rgba(0, 0, 0, .3); border-left: 3px solid #475569; }
+    .case-row strong { color: #fff; font-variant-numeric: tabular-nums; }
+    .case-row.good { border-left-color: #34D399; }
+    .case-row.bad { border-left-color: #F0444F; }
+    .case-row:hover { background: rgba(255, 255, 255, .06); }
+    .case-reasons { display: grid; gap: .4rem; margin-bottom: .75rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+    .case-reason { padding: .5rem .65rem; border-radius: .55rem; background: rgba(0, 0, 0, .35); border-left: 3px solid #34D399; }
+    .case-reason.bad { border-left-color: #F0444F; }
+    .case-reason strong { display: block; font-size: .82rem; color: #fff; }
+    .case-reason span { display: block; font-size: .75rem; color: #A3ACBB; }
+    .case-enemies { display: grid; gap: .4rem; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
+    .case-enemy { display: grid; grid-template-columns: 2.3rem minmax(0, 1fr); gap: 0 .45rem; align-items: center; padding: .35rem .5rem; border-radius: .55rem; text-align: left; background: rgba(0, 0, 0, .3); border: 1px solid rgba(255, 255, 255, .06); }
+    .case-enemy:hover { border-color: #F0444F; }
+    .case-enemy img { width: 2.3rem; height: 1.35rem; object-fit: cover; border-radius: .2rem; grid-row: span 2; }
+    .case-enemy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .78rem; color: #fff; }
+    .case-enemy small { font-size: .7rem; color: #A3ACBB; }
+    #replay-range { accent-color: #F0444F; }
+    .replay-hero { transition: opacity .2s; }
     .pro-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
     .pro-table th, .pro-table td { padding: .5rem .6rem; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, .06); }
     .pro-table thead th { color: #fff; font-weight: 600; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1025,11 +1046,24 @@
           </div>
         </div>
 
+        <div id="rp-replay" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+              <h3 class="font-outfit font-bold text-lg text-white">2D-повтор матча</h3>
+              <p class="text-sm text-slate-400">Настоящие перемещения всех 10 героев из реплея, точки каждые 5 секунд.</p>
+            </div>
+            <button id="rp-replay-load" type="button" class="pro-btn" onclick="replayLoadCurrent()">Открыть повтор</button>
+          </div>
+          <p id="rp-replay-status" class="text-sm text-amber-300"></p>
+          <div id="rp-replay-stage"></div>
+        </div>
+
         <div id="rp-analyst" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-4">
           <div>
             <h3 class="font-outfit font-bold text-lg text-white">Разбор аналитика</h3>
             <p class="text-xs text-slate-400">Драфт, фарм, бои, сборки и объекты по цифрам матча.</p>
           </div>
+          <div id="rp-why" class="hidden case-why"></div>
           <div id="rp-analyst-body" class="space-y-4" aria-live="polite"></div>
           <div id="rp-feedback" class="hidden space-y-2">
             <button type="button" class="pro-link" onclick="proToggleFeedback()">Не согласен с разбором</button>
@@ -1145,6 +1179,10 @@
             </div>
           </div>
 
+          <div id="rp-enemies-box" class="space-y-2">
+            <h4 class="text-sm font-semibold text-white">Досье врагов</h4>
+            <div id="rp-enemies-grid" class="case-enemies"></div>
+          </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3" id="rp-teammates-grid">
             <!-- 5 Teammate Impact Cards injected by JS -->
           </div>
@@ -1605,6 +1643,8 @@
   <script src="analyst.js"></script>
   <script src="stats.js"></script>
   <script src="map.js"></script>
+  <script src="case.js"></script>
+  <script src="replay.js"></script>
   <script>refreshIcons();</script>
 </body>
 </html>

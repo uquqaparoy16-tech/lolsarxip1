@@ -2130,22 +2130,22 @@ function buildStoryFromRealMatch(realMatch, viewerHeroId, viewerSlot) {
       {
         icon: a.kills >= 8 ? 'swords' : 'target',
         title: a.kills >= 8 ? `⚔️ ${a.kills} убийств в матче` : `🎯 KDA ${a.kills}/${a.deaths}/${a.assists}`,
-        text: `Участие в тимфайтах и поддержка линий.`
+        text: `Участие в убийствах команды: ${Math.round((((a.kills || 0) + (a.assists || 0)) / Math.max(1, allies.reduce((sum, p) => sum + (p.kills || 0), 0))) * 100)}%.`
       },
       {
         icon: (a.tower_damage || 0) >= 1500 ? 'building' : 'shield',
-        title: (a.tower_damage || 0) >= 1500 ? `🏰 ${(a.tower_damage || 0).toLocaleString()} урона по вышкам` : `🛡️ Позиция в драках`,
-        text: (a.tower_damage || 0) >= 1500 ? 'Снос ключевых строений врага.' : 'Держал строй команды.'
+        title: `🏰 ${(a.tower_damage || 0).toLocaleString()} урона по вышкам`,
+        text: `У команды всего ${allies.reduce((sum, p) => sum + (p.tower_damage || 0), 0).toLocaleString()} урона по строениям.`
       },
       {
         icon: 'coins',
         title: `💰 ${(a.net_worth || (a.gold_per_min * 20) || 0).toLocaleString()} золота (${a.gold_per_min || 0} GPM)`,
-        text: 'Экономика и тайминг покупки артефактов.'
+        text: `У союзников в среднем ${Math.round(allies.reduce((sum, p) => sum + (p.gold_per_min || 0), 0) / Math.max(1, allies.length))} GPM.`
       },
       {
         icon: a.deaths <= 4 ? 'shield-check' : 'skull',
         title: a.deaths <= 4 ? `🛡️ Всего ${a.deaths} смертей за игру` : `❌ ${a.deaths} смертей в матче`,
-        text: a.deaths <= 4 ? 'Дисциплинированная игра без ненужного фида.' : 'Отдача стриков золота вражеской команде.'
+        text: `У команды всего ${allies.reduce((sum, p) => sum + (p.deaths || 0), 0)} смертей.`
       }
     ];
 
@@ -2171,6 +2171,7 @@ function buildStoryFromRealMatch(realMatch, viewerHeroId, viewerSlot) {
 
   const defaultCulprit = {
     isMvp: isWin,
+    playerSlot: defaultCandidate.player_slot,
     headerTitle: isWin ? 'Главный спаситель и тащер матча (MVP)' : 'Главный виновник поражения (Анти-MVP матча)',
     badge: isWin ? '👑 ТОП-1 MVP МАТЧА' : '🛑 ГЛАВНЫЙ РУИНЕР МАТЧА',
     badgeClass: isWin ? 'bg-uc-red/20 text-uc-red border-uc-red/40' : 'bg-rose-500/20 text-rose-400 border-rose-500/30',
@@ -2436,6 +2437,9 @@ function renderMatchStory(m, isWin) {
     `).join('');
   }
 
+  if (typeof renderPlayerCase === 'function' && c.playerSlot != null) renderPlayerCase(c.playerSlot);
+  if (typeof renderEnemyChips === 'function') renderEnemyChips(m);
+
   // 4. Enemy Danger Card
   const enemyCard = document.getElementById('rp-enemy-mvp-card');
   if (enemyCard && !story.enemyDanger) enemyCard.innerHTML = '';
@@ -2519,6 +2523,7 @@ function selectTeammateDossier(idx) {
       </div>
     `).join('');
   }
+  if (typeof renderPlayerCase === 'function') renderPlayerCase(t.playerSlot);
 }
 
 function setPhaseCard(id, badge, isGood, title, desc, tip) {
