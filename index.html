@@ -218,16 +218,54 @@
     .case-enemy img { width: 2.3rem; height: 1.35rem; object-fit: cover; border-radius: .2rem; grid-row: span 2; }
     .case-enemy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .78rem; color: #fff; }
     .case-enemy small { font-size: .7rem; color: #A3ACBB; }
-    #replay-range { accent-color: #F0444F; }
     .replay-hero { transition: opacity .2s; }
-    .replay-range { position: relative; }
-    #replay-ticks { position: relative; height: .4rem; margin-top: -.1rem; pointer-events: none; }
-    #replay-ticks i { position: absolute; top: 0; width: 2px; height: .4rem; background: #F87171; }
+    .map-camps path { fill: #C7D6CC; fill-opacity: .7; stroke: #0A120E; stroke-width: .25; }
+    .map-marks rect, .map-marks path, .map-marks circle { fill: none; stroke: #D7E3DB; stroke-opacity: .6; stroke-width: .24; }
+    .rm-grid { display: grid; gap: 1.25rem; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); align-items: start; }
+    .rm-stage { order: 2; position: sticky; top: 4.5rem; display: grid; gap: .6rem; }
+    .rm-side { order: 1; display: grid; gap: .75rem; min-width: 0; }
+    @media (max-width: 1023px) {
+      .rm-grid { grid-template-columns: minmax(0, 1fr); }
+      .rm-stage { order: 1; position: static; }
+      .rm-side { order: 2; }
+    }
+    .rm-map { position: relative; }
+    .rm-call { position: absolute; display: flex; align-items: stretch; max-width: 70%; border-radius: .45rem; overflow: hidden; font-size: .78rem; pointer-events: none; background: #05070A; box-shadow: 0 0 0 1px rgba(255, 255, 255, .1); }
+    .rm-call strong { padding: .15rem .4rem; color: #05070A; background: #FDE047; font-family: ui-monospace, monospace; }
+    .rm-call span { padding: .15rem .5rem; color: #fff; }
+    .rm-bar { display: grid; grid-template-columns: 2.6rem auto minmax(0, 1fr); gap: .6rem; align-items: center; padding: .55rem .7rem; border-radius: .8rem; background: rgba(0, 0, 0, .4); border: 1px solid rgba(255, 255, 255, .08); }
+    .rm-play { width: 2.6rem; height: 2.6rem; border-radius: 50%; color: #fff; font-size: .85rem; background: rgba(255, 255, 255, .08); }
+    .rm-play:hover { background: rgba(255, 255, 255, .16); }
+    .rm-clock { display: grid; font-family: ui-monospace, monospace; line-height: 1.15; }
+    .rm-clock strong { font-size: .95rem; color: #FDE047; }
+    .rm-clock span { font-size: .7rem; color: #A3ACBB; }
+    .rm-track { position: relative; height: 3rem; min-width: 0; margin: 0 .4rem; }
+    .rm-row { position: absolute; left: 0; right: 0; height: 1rem; }
+    #rm-top { top: 0; z-index: 2; }
+    #rm-bottom { bottom: 0; pointer-events: none; }
+    .rm-line { position: absolute; left: 0; right: 0; top: 1.4rem; height: .2rem; border-radius: 1rem; background: rgba(255, 255, 255, .14); }
+    .rm-line i { display: block; height: 100%; border-radius: 1rem; background: #FDE047; }
+    #replay-range { position: absolute; left: 0; right: 0; top: 1rem; width: 100%; height: 1rem; margin: 0; opacity: 0; cursor: pointer; }
+    .rm-diamond { position: absolute; top: .15rem; width: .62rem; height: .62rem; margin-left: -.31rem; transform: rotate(45deg); background: #D9B94A; }
+    .rm-diamond:hover { background: #FDE047; }
+    .rm-count { position: absolute; top: 0; min-width: 1rem; margin-left: -.5rem; padding: 0 .2rem; border-radius: .25rem; font-size: .65rem; font-weight: 700; line-height: 1rem; color: #05070A; background: #D9B94A; }
+    .rm-x { position: absolute; top: -.1rem; margin-left: -.3rem; font-size: .85rem; font-style: normal; font-weight: 700; line-height: 1rem; color: #FDE047; }
+    .rm-square { position: absolute; top: .35rem; width: .32rem; height: .32rem; margin-left: -.16rem; border-radius: .08rem; }
+    .rm-square.ally { background: #34D399; }
+    .rm-square.enemy { background: #F87171; }
+    .rm-tools { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+    .rm-feed { display: grid; gap: .25rem; }
+    .rm-item { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: .75rem; padding: .85rem .6rem; border-top: 1px solid rgba(255, 255, 255, .07); border-radius: .5rem; cursor: pointer; opacity: .72; transition: opacity .15s, background .15s; }
+    .rm-item:hover, .rm-item.active { opacity: 1; }
+    .rm-item.active { background: rgba(253, 224, 71, .06); }
+    .rm-time strong { display: block; font-family: ui-monospace, monospace; font-size: 1.35rem; font-weight: 700; line-height: 1.1; color: #FDE047; }
+    .rm-time span { display: block; margin-top: .3rem; font-size: .58rem; font-weight: 600; line-height: 1.3; letter-spacing: .03em; overflow-wrap: anywhere; text-transform: uppercase; color: #A3ACBB; }
+    .rm-item.good .rm-time strong { color: #6EE7B7; }
+    .rm-body h4 { font-size: 1rem; font-weight: 700; color: #fff; }
+    .rm-body p { margin-top: .3rem; font-size: .85rem; line-height: 1.45; color: #CBD5E1; }
+    .rm-coach b { color: #FDE047; font-weight: 700; }
     .replay-focus { flex: 0 1 11rem; }
     .replay-check { display: inline-flex; align-items: center; gap: .35rem; font-size: .8rem; color: #CBD5E1; }
-    .replay-steps { display: flex; flex-wrap: wrap; gap: .25rem; }
-    .replay-step { padding: .1rem .4rem; border-radius: .35rem; font-size: .72rem; font-weight: 600; color: #FCA5A5; background: rgba(240, 68, 79, .12); }
-    .replay-step.active, .replay-step:hover { color: #fff; background: #F0444F; }
     .replay-moment { display: grid; gap: .3rem; padding: .7rem .8rem; border-radius: .65rem; font-size: .82rem; color: #CBD5E1; background: rgba(0, 0, 0, .4); border: 1px solid rgba(240, 68, 79, .4); }
     .replay-moment-head span { display: block; font-size: .72rem; color: #A3ACBB; }
     .replay-moment-head strong { color: #fff; }
@@ -1100,10 +1138,10 @@
         <div id="rp-replay" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-3">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="min-w-0">
-              <h3 class="font-outfit font-bold text-lg text-white">2D-повтор матча</h3>
-              <p class="text-sm text-slate-400">Настоящие перемещения всех 10 героев из реплея, точки каждые 5 секунд.</p>
+              <h3 class="font-outfit font-bold text-lg text-white">Разбор на карте</h3>
+              <p class="text-sm text-slate-400">Каждый момент с таймкодом: нажми на него, и карта покажет эту секунду.</p>
             </div>
-            <button id="rp-replay-load" type="button" class="pro-btn" onclick="replayLoadCurrent()">Открыть повтор</button>
+            <button id="rp-replay-load" type="button" class="pro-btn" onclick="replayLoadCurrent()">Загрузить карту</button>
           </div>
           <p id="rp-replay-status" class="text-sm text-amber-300"></p>
           <div id="rp-replay-stage"></div>
@@ -1308,7 +1346,10 @@
             <i data-lucide="skull" class="w-5 h-5 text-uc-red"></i>
             Разбор ошибок в матче
           </h3>
-          <div id="rp-death-map" class="hidden space-y-3 mb-3"></div>
+          <details id="rp-death-wrap" class="mh-more hidden mb-3">
+            <summary>Все смерти и варды списком</summary>
+            <div id="rp-death-map" class="hidden space-y-3"></div>
+          </details>
           <div id="match-mistakes" class="space-y-2 mb-3"></div>
           <div id="death-timeline" class="space-y-3"></div>
         </div>

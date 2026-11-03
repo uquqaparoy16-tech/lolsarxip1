@@ -250,7 +250,7 @@ function renderPlayerCase(slot) {
     </div>
     <h4 class="case-title">Весь матч по времени</h4>
     <div class="case-list scroll">${result.timeline.map(row => caseRow(formatClock(row.time), row.text, row.tone, row.time)).join('') || '<p class="text-sm text-slate-400">Событий нет.</p>'}</div>
-    <p class="text-xs text-slate-400">Нажми на строку, чтобы открыть этот момент в 2D-повторе.</p>`;
+    <p class="text-xs text-slate-400">Нажми на строку, чтобы открыть этот момент на карте.</p>`;
 }
 
 function renderEnemyChips(m) {
