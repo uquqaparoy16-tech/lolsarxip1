@@ -43,6 +43,7 @@ const STATIC_FILES = {
   '/robots.txt': 'robots.txt',
   '/yandex_c3704f6e31ce03ca.html': 'yandex_c3704f6e31ce03ca.html',
   '/google0b2e23d70af5f039.html': 'google0b2e23d70af5f039.html',
+  '/google8c058a699492f5ba.html': 'google8c058a699492f5ba.html',
   '/sitemap.xml': 'sitemap.xml',
   '/4ada15a6731c808ebe6f925c678ebdd7.txt': '4ada15a6731c808ebe6f925c678ebdd7.txt'
 };
