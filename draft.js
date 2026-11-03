@@ -3,7 +3,7 @@
 // Вкладка «Драфт»: подбор пика и закупа. Сайт не читает игру, поэтому героев отмечает сам игрок.
 // Цифры приходят из STRATZ или OpenDota, а советы против вражеского пика заданы вручную.
 
-const DRAFT_LIMITS = { ally: 4, enemy: 5, ban: 14 };
+const DRAFT_LIMITS = { ally: 4, enemy: 5, ban: 14 }; // пятое место в команде занимает сам игрок
 const DRAFT_TOP = 8;
 const DRAFT_MIN_GAMES = 30;
 const DRAFT_ITEM_ICON = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/items/';
@@ -16,12 +16,20 @@ const DRAFT_STAGES = [
 ];
 // Части больших предметов: в подсказке закупа на середину и конец игры они только мешают
 const DRAFT_COMPONENTS = new Set(['hyperstone', 'mystic_staff', 'platemail', 'demon_edge', 'sacred_relic', 'reaver', 'ogre_axe', 'blade_of_alacrity', 'staff_of_wizardry', 'eagle', 'talisman_of_evasion', 'point_booster', 'vitality_booster', 'energy_booster', 'ring_of_health', 'void_stone', 'claymore', 'broadsword', 'mithril_hammer', 'javelin', 'belt_of_strength', 'boots_of_elves', 'robe', 'gloves', 'chainmail', 'quarterstaff', 'helm_of_iron_will', 'blades_of_attack', 'gauntlets', 'slippers', 'mantle', 'circlet', 'lifesteal']);
-const DRAFT_ENEMY_TIPS = [
-  { heroes: ['Riki', 'Clinkz', 'Bounty Hunter', 'Nyx Assassin', 'Weaver'], text: 'Невидимость у врага: {names}. Купите Dust и Sentry Ward.' },
-  { heroes: ['Phantom Lancer', 'Naga Siren', 'Terrorblade', 'Chaos Knight'], text: 'Иллюзии у врага: {names}. Пригодится урон по площади.' },
-  { heroes: ['Necrophos', 'Alchemist', 'Huskar', 'Io'], text: 'Сильное лечение у врага: {names}. Пригодится Spirit Vessel.' },
-  { heroes: ['Lion', 'Lina', 'Zeus', 'Tinker', 'Skywrath Mage', 'Leshrac'], text: 'Сильная магия у врага: {names}. Подумай про Glimmer Cape или Pipe of Insight.' }
+// Советы, а не статистика: какие предметы обычно берут против такого врага, отдельно для кора и поддержки
+const DRAFT_ITEM_RULES = [
+  { why: 'невидимость', heroes: ['Riki', 'Clinkz', 'Bounty Hunter', 'Nyx Assassin', 'Weaver'], core: ['dust'], support: ['ward_sentry', 'dust'] },
+  { why: 'иллюзии', heroes: ['Phantom Lancer', 'Naga Siren', 'Terrorblade', 'Chaos Knight'], core: ['mjollnir', 'bfury'], support: [] },
+  { why: 'сильное лечение', heroes: ['Necrophos', 'Alchemist', 'Huskar', 'Io', 'Omniknight'], core: ['skadi', 'spirit_vessel'], support: ['spirit_vessel'] },
+  { why: 'сильная магия', heroes: ['Lion', 'Lina', 'Zeus', 'Tinker', 'Skywrath Mage', 'Leshrac', 'Pugna', 'Queen of Pain'], core: ['black_king_bar', 'pipe'], support: ['glimmer_cape', 'pipe'] },
+  { why: 'контроль по одной цели', heroes: ['Doom', 'Legion Commander', 'Batrider', 'Bane', 'Beastmaster', 'Shadow Shaman', 'Lion'], core: ['sphere', 'black_king_bar'], support: ['lotus_orb', 'force_staff'] },
+  { why: 'сильные атаки', heroes: ['Phantom Assassin', 'Juggernaut', 'Sven', 'Ursa', 'Troll Warlord', 'Slark', 'Lifestealer', 'Drow Ranger', 'Faceless Void'], core: ['blade_mail', 'assault'], support: ['ghost', 'force_staff'] },
+  { why: 'уклонение', heroes: ['Phantom Assassin', 'Windranger'], core: ['monkey_king_bar'], support: [] },
+  { why: 'быстро убегают', heroes: ['Anti-Mage', 'Puck', 'Storm Spirit', 'Ember Spirit', 'Queen of Pain', 'Slark', 'Weaver'], core: ['orchid', 'sheepstick'], support: ['rod_of_atos'] },
+  { why: 'призванные существа', heroes: ['Broodmother', 'Chen', 'Enchantress', 'Lycan', "Nature's Prophet"], core: ['mjollnir', 'bfury'], support: [] },
+  { why: 'сильная пассивка', heroes: ['Bristleback', 'Phantom Assassin', 'Spectre', 'Huskar'], core: ['silver_edge'], support: [] }
 ];
+const DRAFT_FIT_MAX = 6;
 
 const draft = {
   side: 'enemy',
@@ -47,8 +55,14 @@ async function draftTable(heroId) {
   return draft.tables.get(heroId);
 }
 
-function draftTaken() {
+function draftOthers() {
   return new Set([...draft.ally, ...draft.enemy, ...draft.ban]);
+}
+
+function draftTaken() {
+  const taken = draftOthers();
+  if (draft.myHero) taken.add(draft.myHero);
+  return taken;
 }
 
 function draftFitsPosition(heroId) {
@@ -116,7 +130,7 @@ function draftScore(hero, bracket, own) {
 }
 
 function draftSuggestions(stats) {
-  const taken = draftTaken();
+  const taken = draftOthers(); // свой герой остаётся в списке и подсвечивается
   const bracket = draftBracket();
   const own = draftOwnGames();
   return stats
@@ -126,12 +140,44 @@ function draftSuggestions(stats) {
     .slice(0, DRAFT_TOP);
 }
 
-function draftEnemyTips() {
+function draftItemTitle(key) {
+  return (draft.itemTitles && draft.itemTitles[key]) || formatItemName(key);
+}
+
+// Предметы под вражеский пик: чем больше врагов закрывает предмет, тем он выше
+function draftFitItems() {
   const names = new Set(draft.enemy.map(getHeroName));
-  return DRAFT_ENEMY_TIPS
-    .map(tip => ({ tip, found: tip.heroes.filter(name => names.has(name)) }))
-    .filter(row => row.found.length > 0)
-    .map(row => row.tip.text.replace('{names}', row.found.join(', ')));
+  const role = draft.position >= 4 ? 'support' : 'core';
+  const items = new Map();
+
+  DRAFT_ITEM_RULES.forEach(rule => {
+    const found = rule.heroes.filter(name => names.has(name));
+    if (found.length === 0) return;
+    rule[role].forEach(key => {
+      const item = items.get(key) || { key, heroes: new Set(), reasons: [] };
+      found.forEach(name => item.heroes.add(name));
+      item.reasons.push(`${rule.why}: ${found.join(', ')}`);
+      items.set(key, item);
+    });
+  });
+
+  return [...items.values()].sort((a, b) => b.heroes.size - a.heroes.size).slice(0, DRAFT_FIT_MAX);
+}
+
+function draftFitHtml() {
+  const items = draftFitItems();
+  if (items.length === 0) return '';
+  const position = `позиция ${draft.position}`;
+  return `
+    <div class="draft-fit">
+      <h4>Что брать именно под этих врагов (${position})</h4>
+      ${items.map(item => `
+        <div class="draft-fit-row">
+          <img loading="lazy" decoding="async" src="${DRAFT_ITEM_ICON}${esc(item.key)}.png" alt="" onerror="this.remove()">
+          <span><strong>${esc(draftItemTitle(item.key))}</strong><small>${esc(item.reasons.join('; '))}</small></span>
+        </div>`).join('')}
+      <p>Это советы по типу врага, а не статистика.</p>
+    </div>`;
 }
 
 // ─── Интерфейс ──────────────────────────────────────────────────────────
@@ -144,10 +190,15 @@ function renderDraftSlots() {
   ['ally', 'enemy', 'ban'].forEach(side => {
     const box = document.getElementById(`draft-${side}`);
     const free = Math.max(0, (side === 'ban' ? 0 : DRAFT_LIMITS[side]) - draft[side].length);
-    box.innerHTML = draft[side].map(id => `
-      <button type="button" class="draft-slot" title="Убрать" aria-label="Убрать ${esc(getHeroName(id))}" onclick="draftRemove('${side}', ${id})">${draftHeroButton(id)}</button>`).join('')
+    const me = !draft.myHero
+      ? '<button type="button" class="draft-slot empty me" onclick="draftSetSide(\'me\')"><span>Твой герой</span></button>'
+      : `<button type="button" class="draft-slot me" title="Убрать" aria-label="Убрать своего героя" onclick="draftClearMe()">${draftHeroButton(draft.myHero)}</button>`;
+    box.innerHTML = (side === 'ally' ? me : '')
+      + draft[side].map(id => `
+        <button type="button" class="draft-slot" title="Убрать" aria-label="Убрать ${esc(getHeroName(id))}" onclick="draftRemove('${side}', ${id})">${draftHeroButton(id)}</button>`).join('')
       + '<span class="draft-slot empty"></span>'.repeat(free);
-    document.getElementById(`draft-${side}-count`).textContent = `${draft[side].length}/${DRAFT_LIMITS[side]}`;
+    const count = side === 'ally' ? `${draft.ally.length + (draft.myHero ? 1 : 0)}/5` : `${draft[side].length}/${DRAFT_LIMITS[side]}`;
+    document.getElementById(`draft-${side}-count`).textContent = count;
   });
 }
 
@@ -210,11 +261,13 @@ async function renderDraftSuggestions() {
     </div>`;
 }
 
+// Пока герой не выбран, совет по предметам стоит под командами, а потом переезжает в закуп
 function renderDraftTips() {
   const box = document.getElementById('draft-tips');
-  const tips = draftEnemyTips();
-  box.classList.toggle('hidden', tips.length === 0);
-  box.innerHTML = tips.map(tip => `<p>${esc(tip)}</p>`).join('');
+  const html = draft.myHero ? '' : draftFitHtml();
+  box.classList.toggle('hidden', !html);
+  box.innerHTML = html;
+  document.getElementById('draft-build-fit').innerHTML = draft.myHero ? draftFitHtml() : '';
 }
 
 async function renderDraftBuild() {
@@ -229,7 +282,7 @@ async function renderDraftBuild() {
 
   const data = await proFetchJson(`/heroes/${heroId}/itemPopularity`);
   await loadItemNames();
-  if (!draft.itemTitles) draft.itemTitles = await proFetchJson('/itemTitles');
+  await draftLoadTitles();
   if (draft.myHero !== heroId) return;
   if (!data || !itemNames) {
     box.innerHTML = '<p class="text-sm text-amber-300">Сейчас предметы недоступны. Попробуй через минуту.</p>';
@@ -251,7 +304,7 @@ async function renderDraftBuild() {
           ${items.map(item => `
             <span class="draft-item">
               <img loading="lazy" decoding="async" src="${DRAFT_ITEM_ICON}${esc(item.key)}.png" alt="" onerror="this.remove()">
-              ${esc((draft.itemTitles && draft.itemTitles[item.key]) || formatItemName(item.key))}
+              ${esc(draftItemTitle(item.key))}
             </span>`).join('')}
         </div>
       </div>`;
@@ -264,6 +317,12 @@ function renderDraft(refreshPicks = true) {
   renderDraftGrid();
   renderDraftTips();
   if (refreshPicks) renderDraftSuggestions();
+}
+
+async function draftLoadTitles() {
+  if (draft.itemTitles) return;
+  draft.itemTitles = await proFetchJson('/itemTitles');
+  if (draft.itemTitles) renderDraftTips();
 }
 
 // ─── Действия ───────────────────────────────────────────────────────────
@@ -283,19 +342,30 @@ function draftSearch(value) {
   renderDraftGrid();
 }
 
-function draftAdd(heroId) {
-  const side = draft.side;
-  if (draftTaken().has(heroId)) return;
-  if (draft[side].length >= DRAFT_LIMITS[side]) {
-    proToast(`В этом списке уже ${DRAFT_LIMITS[side]} героев`);
-    return;
-  }
-  draft[side].push(heroId);
-  if (draft.myHero === heroId) draft.myHero = null;
+function draftSetMe(heroId) {
+  draft.myHero = heroId;
+  if (draft.side === 'me') draft.side = 'ally';
   draft.query = '';
   document.getElementById('draft-search').value = '';
   renderDraft();
   renderDraftBuild();
+}
+
+function draftAdd(heroId) {
+  const side = draft.side;
+  if (draftTaken().has(heroId)) return;
+  if (side === 'me') {
+    draftSetMe(heroId);
+    return;
+  }
+  if (draft[side].length >= DRAFT_LIMITS[side]) {
+    proToast(side === 'ally' ? 'Пятое место для тебя: нажми «Мой герой»' : `В этом списке уже ${DRAFT_LIMITS[side]} героев`);
+    return;
+  }
+  draft[side].push(heroId);
+  draft.query = '';
+  document.getElementById('draft-search').value = '';
+  renderDraft();
 }
 
 function draftRemove(side, heroId) {
@@ -303,10 +373,14 @@ function draftRemove(side, heroId) {
   renderDraft();
 }
 
-function draftChoose(heroId) {
-  draft.myHero = heroId;
-  renderDraftSuggestions();
+function draftClearMe() {
+  draft.myHero = null;
+  renderDraft();
   renderDraftBuild();
+}
+
+function draftChoose(heroId) {
+  draftSetMe(heroId);
   document.getElementById('draft-build').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -327,4 +401,5 @@ function openDraft() {
   if (draftReady) return;
   draftReady = true;
   renderDraft();
+  draftLoadTitles();
 }

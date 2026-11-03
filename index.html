@@ -91,7 +91,16 @@
     .draft-slot img { width: 100%; height: 100%; object-fit: cover; }
     .draft-slot span { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 .15rem; font-size: .6rem; color: #fff; background: rgba(0, 0, 0, .65); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .draft-slot:hover { border-color: #F0444F; }
-    .draft-tips { padding-top: .75rem; font-size: .85rem; line-height: 1.5; color: #FDE68A; border-top: 1px solid rgba(255, 255, 255, .06); }
+    .draft-slot.me { border-color: #F0444F; }
+    .draft-slot.empty.me span { position: static; display: flex; align-items: center; justify-content: center; height: 100%; padding: 0; font-size: .62rem; line-height: 1.1; white-space: normal; color: #F45D66; background: none; }
+    .draft-tips { padding-top: .75rem; border-top: 1px solid rgba(255, 255, 255, .06); }
+    .draft-fit { display: grid; gap: .45rem; }
+    .draft-fit h4 { font-size: .85rem; font-weight: 600; color: #fff; }
+    .draft-fit p { font-size: .75rem; color: #A3ACBB; }
+    .draft-fit-row { display: grid; grid-template-columns: 2rem minmax(0, 1fr); gap: .55rem; align-items: center; }
+    .draft-fit-row img { width: 2rem; height: 1.5rem; object-fit: cover; border-radius: .2rem; }
+    .draft-fit-row strong { display: block; font-size: .85rem; color: #fff; }
+    .draft-fit-row small { display: block; font-size: .75rem; color: #FDE68A; }
     .draft-layout { display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
     @media (min-width: 1024px) { .draft-layout { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); } }
     .draft-grid { display: grid; gap: .35rem; grid-template-columns: repeat(auto-fill, minmax(4.6rem, 1fr)); max-height: 34rem; overflow-y: auto; padding-right: .25rem; }
@@ -1186,7 +1195,7 @@
 
       <div class="glass rounded-2xl p-5 sm:p-6 space-y-4">
         <div class="draft-teams">
-          <div><h3>Союзники <small id="draft-ally-count"></small></h3><div id="draft-ally" class="draft-slots"></div></div>
+          <div><h3>Твоя команда <small id="draft-ally-count"></small></h3><div id="draft-ally" class="draft-slots"></div></div>
           <div><h3>Враги <small id="draft-enemy-count"></small></h3><div id="draft-enemy" class="draft-slots"></div></div>
           <div><h3>Баны <small id="draft-ban-count"></small></h3><div id="draft-ban" class="draft-slots"></div></div>
         </div>
@@ -1197,6 +1206,7 @@
         <div class="glass rounded-2xl p-5 sm:p-6 space-y-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex flex-wrap gap-2" role="group" aria-label="Куда добавить героя">
+              <button type="button" class="pro-pill" data-draft-side="me" onclick="draftSetSide('me')">Мой герой</button>
               <button type="button" class="pro-pill" data-draft-side="ally" onclick="draftSetSide('ally')">Союзник</button>
               <button type="button" class="pro-pill" data-draft-side="enemy" onclick="draftSetSide('enemy')">Враг</button>
               <button type="button" class="pro-pill" data-draft-side="ban" onclick="draftSetSide('ban')">Бан</button>
@@ -1209,7 +1219,10 @@
 
         <div class="space-y-6">
           <div class="glass rounded-2xl p-5 sm:p-6 space-y-3">
-            <h3 class="font-outfit font-bold text-lg text-white">Лучшие пики</h3>
+            <div>
+              <h3 class="font-outfit font-bold text-lg text-white">Лучшие пики</h3>
+              <p class="text-sm text-slate-400">Выбери позицию и нажми на героя: он станет твоим пиком.</p>
+            </div>
             <div class="flex flex-wrap gap-2" role="group" aria-label="Твоя позиция">
               <button type="button" class="pro-pill" data-draft-position="1" onclick="draftSetPosition(1)">1 Лёгкая</button>
               <button type="button" class="pro-pill" data-draft-position="2" onclick="draftSetPosition(2)">2 Центр</button>
@@ -1223,8 +1236,10 @@
           <div id="draft-build" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-3 border-uc-red/25">
             <div>
               <h3 id="draft-build-title" class="font-outfit font-bold text-lg text-white"></h3>
-              <p class="text-sm text-slate-400">Самые популярные предметы в турнирных матчах по данным OpenDota.</p>
+              <p class="text-sm text-slate-400">Сначала предметы под врагов, ниже популярная сборка из турнирных матчей OpenDota.</p>
             </div>
+            <div id="draft-build-fit"></div>
+            <h4 class="text-sm font-semibold text-white">Обычная сборка</h4>
             <div id="draft-build-body" class="draft-build"></div>
           </div>
         </div>
