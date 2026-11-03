@@ -536,7 +536,7 @@ function replayLostFightTurn(group, side, score) {
   const roshan = replay.roshan.deaths.some(([time]) => time >= group.from && time <= until);
   const fixes = [];
   if (group.ours.length >= REPLAY_TURN_WIPE) fixes.push('Команда легла почти вся: отступать надо было сразу, как только упал первый герой.');
-  if (absent.length > 0) fixes.push(`Собраться вместе: ${replayNames(absent)} ${absent.length > 1 ? 'были' : 'был'} далеко. Без них в драку заходить не стоило.`);
+  if (absent.length > 0) fixes.push(`Собраться вместе: ${replayNames(absent)} ${absent.length > 1 ? 'были' : 'был'} далеко. ${absent.length > 1 ? 'Без них' : 'Без него'} в драку заходить не стоило.`);
   if (roshan) fixes.push('Сразу после драки враг забрал Рошана: нужен был выкуп или отход к логову заранее.');
   if (fell > 0) fixes.push(`После драки упало зданий: ${fell}. Нужен был выкуп, чтобы их защитить.`);
   if (fixes.length === 0) fixes.push('Перед дракой проверить, готовы ли главные умения и предметы. Если нет, отойти к вышке и дождаться команды.');
@@ -592,7 +592,7 @@ function buildReplayTurns() {
       time: group.from,
       weight: swing * (even ? 1.4 : 1),
       gain: even
-        ? `Отрыв до драки ${replayLeadText(before)}, после ${replayLeadText(after)}. ${side.won ? 'Здесь игра качнулась к вам.' : 'Игра была открытой, здесь её можно было удержать.'}`
+        ? `Отрыв до драки ${replayLeadText(before)}, после ${replayLeadText(after)} ${side.won ? 'Здесь игра качнулась к вам.' : 'Игра была открытой, здесь её можно было удержать.'}`
         : `Отрыв до драки ${replayLeadText(before)}, после ${replayLeadText(after)}`
     };
     return side.won ? replayWonFightTurn(group, side, score) : replayLostFightTurn(group, side, score);
