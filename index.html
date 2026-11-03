@@ -135,6 +135,7 @@
     .stat-tile strong { display: block; font-size: 1.15rem; color: #fff; }
     .stat-tile span { font-size: .75rem; color: #A3ACBB; }
     .stat-tiles.small strong { font-size: .95rem; }
+    .stat-columns > div { min-width: 0; }
     .stat-columns { display: grid; gap: 1.25rem 1.5rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); }
     #overview-result h4, #hero-detail-body h4 { margin-bottom: .4rem; font-size: .85rem; font-weight: 600; color: #fff; }
     .stat-table { width: 100%; border-collapse: collapse; font-size: .8rem; color: #CBD5E1; }
@@ -154,6 +155,17 @@
     .stat-bar span { white-space: nowrap; }
     .pro-hero .good { color: #34D399; }
     .pro-hero .bad { color: #F87171; }
+    .death-map-box { display: grid; gap: .75rem 1rem; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); align-items: center; }
+    @media (max-width: 560px) { .death-map-box { grid-template-columns: minmax(0, 1fr); } }
+    .death-map { display: block; width: 100%; aspect-ratio: 1; border-radius: .6rem; }
+    .stat-awards { display: grid; gap: .4rem; margin-bottom: .75rem; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); }
+    .stat-award { padding: .4rem .55rem; border-radius: .5rem; background: rgba(0, 0, 0, .35); }
+    .stat-award > span { display: block; font-size: .7rem; color: #FDE68A; }
+    .stat-award small { display: block; font-size: .7rem; color: #A3ACBB; }
+    .stat-list { padding-left: 1rem; list-style: disc; font-size: .82rem; color: #CBD5E1; }
+    .draft-edge { padding: .45rem .6rem; border-radius: .5rem; font-size: .85rem; font-weight: 600; background: rgba(0, 0, 0, .35); }
+    .draft-edge.good { color: #34D399; }
+    .draft-edge.bad { color: #F87171; }
     .pro-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
     .pro-table th, .pro-table td { padding: .5rem .6rem; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, .06); }
     .pro-table thead th { color: #fff; font-weight: 600; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -719,6 +731,7 @@
           </div>
           <div id="bench-heroes" class="flex gap-2 overflow-x-auto pb-1"></div>
           <div id="bench-bars" class="pro-bars"></div>
+          <div id="bench-pro" class="space-y-2"></div>
         </div>
 
         <div id="meta-card" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-4">
@@ -900,7 +913,7 @@
             <input
               id="custom-match-id"
               type="text"
-              placeholder="Match ID"
+              placeholder="Match ID или ссылка"
               class="bg-black/50 text-white px-3 py-2 rounded-lg text-xs font-mono border border-uc-border focus:border-uc-red focus:outline-none w-40"
               onkeypress="if(event.key==='Enter') inspectCustomMatch()"
             />
@@ -999,6 +1012,13 @@
             <p class="text-xs text-slate-400">Драфт, фарм, бои, сборки и объекты по цифрам матча.</p>
           </div>
           <div id="rp-analyst-body" class="space-y-4" aria-live="polite"></div>
+          <div id="rp-feedback" class="hidden space-y-2">
+            <button type="button" class="pro-link" onclick="proToggleFeedback()">Не согласен с разбором</button>
+            <div id="rp-feedback-form" class="hidden space-y-2">
+              <textarea id="rp-feedback-text" class="pro-input w-full" rows="3" maxlength="500" aria-label="Что не так в разборе" placeholder="Что здесь неверно? Сообщение прочитает автор сайта."></textarea>
+              <button id="rp-feedback-send" type="button" class="pro-btn" onclick="proSendFeedback()">Отправить</button>
+            </div>
+          </div>
         </div>
 
         <!-- ═══════ KEY VERDICT BANNER (ПОЧЕМУ ПРОИГРАЛИ / ВЫИГРАЛИ) ═══════ -->
@@ -1184,6 +1204,7 @@
             <i data-lucide="skull" class="w-5 h-5 text-uc-red"></i>
             Разбор ошибок в матче
           </h3>
+          <div id="rp-death-map" class="hidden death-map-box"></div>
           <div id="match-mistakes" class="space-y-2 mb-3"></div>
           <div id="death-timeline" class="space-y-3"></div>
         </div>

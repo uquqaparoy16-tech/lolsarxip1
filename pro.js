@@ -15,6 +15,7 @@ const PRO_NEXT_STEPS = [0.5, 0.7, 0.9, 0.95, 0.99];
 const PRO_BRACKETS = { 1: 'Рекрут', 2: 'Страж', 3: 'Рыцарь', 4: 'Герой', 5: 'Легенда', 6: 'Властелин', 7: 'Божество', 8: 'Титан' };
 const PRO_RECENT_KEY = 'dota-recent-players';
 const PRO_RECENT_MAX = 6;
+const PRO_MIN_GAMES = 20;
 const PRO_GOAL_TEXT = {
   deaths: g => `не больше ${g} смертей за матч`,
   gpm: g => `от ${g} золота в минуту`,
@@ -40,6 +41,7 @@ const proState = {
   installPrompt: null,
   compareToken: 0,
   compareId: null,
+  telegram: false,
   habitsToken: 0
 };
 
@@ -201,6 +203,9 @@ function heroAverages(matches) {
         heroId,
         games: games.length,
         wins: games.filter(wonMatch).length,
+        kills: mean(m => m.kills),
+        deaths: mean(m => m.deaths),
+        assists: mean(m => m.assists),
         duration: 60,
         gold_per_min: mean(m => m.gold_per_min || null),
         xp_per_min: mean(m => m.xp_per_min || null),
@@ -241,6 +246,43 @@ async function proSelectBenchHero(heroId) {
   }
   card.classList.remove('hidden');
   box.innerHTML = benchRows(result, hero);
+  renderProCompare(hero);
+}
+
+// Турнирные матчи дают ориентир, но там другой темп: сравнение не значит, что надо играть точно так же
+async function renderProCompare(hero) {
+  const box = document.getElementById('bench-pro');
+  if (!box) return;
+  box.innerHTML = '';
+  const pro = await proFetchJson(`/pro/${hero.heroId}`);
+  if (proState.benchHero !== hero.heroId) return;
+  if (!pro || !(pro.games >= PRO_MIN_GAMES)) return;
+
+  const lhMine = hero.last_hits;
+  const rows = [
+    ['Золото в минуту', hero.gold_per_min, pro.gpm, 0],
+    ['Опыт в минуту', hero.xp_per_min, pro.xpm, 0],
+    ['Добивания в минуту', lhMine, pro.lh, 1],
+    ['Урон по героям в минуту', hero.hero_damage, pro.dmg, 0],
+    ['Урон по вышкам', hero.tower_damage, pro.td, 0],
+    ['Убийства', hero.kills, pro.kills, 1],
+    ['Смерти', hero.deaths, pro.deaths, 1, true],
+    ['Помощь', hero.assists, pro.assists, 1]
+  ].filter(row => row[1] != null);
+  const show = (value, digits) => commaNumber(value.toFixed(digits));
+
+  box.innerHTML = `
+    <h4 class="text-sm font-semibold text-white">Ты и про-игроки на ${esc(getHeroName(hero.heroId))}</h4>
+    <div class="overflow-x-auto">
+      <table class="stat-table">
+        <thead><tr><th></th><th>Ты</th><th>Про</th></tr></thead>
+        <tbody>${rows.map(([label, mine, theirs, digits, lower]) => {
+          const ahead = lower ? mine <= theirs : mine >= theirs;
+          return `<tr><td>${esc(label)}</td><td class="${ahead ? 'pro-win' : ''}">${show(mine, digits)}</td><td>${show(theirs, digits)}</td></tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>
+    <p class="text-xs text-slate-400">Про: ${Number(pro.games).toLocaleString()} турнирных матчей за полгода по данным OpenDota.</p>`;
 }
 
 // ─── Мета по рангу ──────────────────────────────────────────────────────
@@ -480,7 +522,10 @@ function buildHabits(games) {
       advice: 'Перед дракой трать золото: потерять можно только то, что лежит в кармане.'
     });
   }
-  return { games: rows.length, habits: habits.sort((a, b) => b.score - a.score) };
+  const points = typeof deathPoints === 'function'
+    ? rows.flatMap(row => deathPoints(row.detail.deaths, row.live.player.player_slot >= 128))
+    : [];
+  return { games: rows.length, points, habits: habits.sort((a, b) => b.score - a.score) };
 }
 
 function renderHabits(result) {
@@ -491,6 +536,11 @@ function renderHabits(result) {
   }
   box.innerHTML = `
     <p class="text-sm text-slate-400">Разобрано матчей: ${result.games}. Сверху то, что мешает сильнее всего.</p>
+    ${typeof deathMapHtml === 'function' && result.points.length > 0 ? `
+      <div class="death-map-box">
+        ${deathMapHtml(result.points, 'Карта смертей за все матчи')}
+        <p class="text-sm text-slate-300">Карта повёрнута так, что твоя база всегда внизу слева. На чужой половине: <strong class="text-white">${enemyHalfShare(result.points)}%</strong> смертей.</p>
+      </div>` : ''}
     <div class="pro-habits">
       ${result.habits.map(item => `
         <div class="pro-habit ${item.bad ? 'bad' : 'good'}">
@@ -930,6 +980,7 @@ async function proCheckAi() {
     const res = await fetch('/api/health');
     const data = res.ok ? await res.json() : null;
     proState.ai = !!(data && data.sources && data.sources.ai);
+    proState.telegram = !!(data && data.sources && data.sources.telegram);
     if (proState.ai && currentActiveReplayMatch) renderCoach(currentActiveReplayMatch);
   } catch (e) {}
 }

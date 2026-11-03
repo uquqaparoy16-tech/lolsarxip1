@@ -20,6 +20,21 @@ const STATS_RECORDS = {
 };
 const STATS_ITEM_SLOTS = ['item_0', 'item_1', 'item_2', 'item_3', 'item_4', 'item_5'];
 
+const STATS_MAP_MIN = 64; // игровая сетка STRATZ идёт от 64 до 192
+const STATS_MAP_SIZE = 128;
+const STATS_SMURF_WIN = 65;
+const STATS_SMURF_GAP = 600;
+const STATS_SMURF_GAMES = 150;
+const STATS_AWARDS = [
+  ['Фарм', p => p.net_worth, 'нетворс'],
+  ['Убийца', p => p.kills, 'убийств'],
+  ['Урон', p => p.hero_damage, 'урона'],
+  ['Поддержка', p => p.assists, 'помощи'],
+  ['Лечение', p => p.hero_healing, 'лечения'],
+  ['Разрушитель', p => p.tower_damage, 'по строениям'],
+  ['Добивания', p => p.last_hits, 'добиваний']
+];
+
 const stats = {
   overviewToken: 0,
   heroBracket: 0,
@@ -112,6 +127,40 @@ function buildActivity(rows) {
   return { total: rows.length, days: ordered, parts, best };
 }
 
+// Только сигналы по открытым цифрам: это подозрение, а не доказательство
+function smurfSignals(view, summary) {
+  const signals = [];
+  if (summary && summary.winrate >= STATS_SMURF_WIN) signals.push(`высокий винрейт в последних играх: ${summary.winrate}%`);
+  if (currentProfileTier && summary && summary.skill.trueMMR - rankTierToMMR(currentProfileTier) >= STATS_SMURF_GAP) signals.push('цифры заметно выше медали');
+  if (view.games > 0 && view.games < STATS_SMURF_GAMES) signals.push(`мало известных матчей: ${view.games}`);
+  return signals;
+}
+
+function steamIds(accountId) {
+  return [
+    ['ID в Доте и код для друзей', String(accountId)],
+    ['SteamID64', String(STEAM64_BASE + BigInt(accountId))],
+    ['SteamID3', `[U:1:${accountId}]`]
+  ];
+}
+
+function renderAccountHtml(view) {
+  const signals = smurfSignals(view, proState.summary);
+  const verdict = signals.length >= 3 ? 'Возможный смурф' : signals.length === 2 ? 'Есть признаки смурфа' : 'Признаков смурфа мало';
+  return `
+    <div class="stat-columns">
+      <div>
+        <h4>Проверка на смурфа: ${esc(verdict)}</h4>
+        ${signals.length > 0 ? `<ul class="stat-list">${signals.map(signal => `<li>${esc(signal)}</li>`).join('')}</ul>` : '<p class="text-sm text-slate-400">Цифры не выбиваются.</p>'}
+        <p class="text-xs text-slate-400 mt-1">Это подозрение по открытым цифрам, а не доказательство. OpenDota знает не все матчи, поэтому их число может быть занижено.</p>
+      </div>
+      <div>
+        <h4>ID аккаунта</h4>
+        <div class="overflow-x-auto"><table class="stat-table"><tbody>${steamIds(currentAccountId).map(([label, value]) => statsRow([esc(label), `<button type="button" class="pro-link" onclick="proCopy('${esc(value)}', 'Скопировано')">${esc(value)}</button>`])).join('')}</tbody></table></div>
+      </div>
+    </div>`;
+}
+
 function renderOverviewHtml(view) {
   const tiles = [
     statsTile('Матчей', view.games.toLocaleString()),
@@ -181,6 +230,7 @@ function renderOverviewHtml(view) {
       ${records ? `<div><h4>Рекорды</h4><div class="overflow-x-auto"><table class="stat-table"><tbody>${records}</tbody></table></div></div>` : ''}
       ${activity}
     </div>
+    ${renderAccountHtml(view)}
     <p class="text-xs text-slate-400">Считаются только матчи, которые знает OpenDota, поэтому их может быть меньше, чем в игре.</p>`;
 }
 
@@ -245,11 +295,68 @@ function statsBoardRows(team, viewer) {
     </tr>`).join('');
 }
 
+function statsAwards(match) {
+  return STATS_AWARDS.map(([title, read, unit]) => {
+    const best = [...match.players].sort((a, b) => (read(b) || 0) - (read(a) || 0))[0];
+    return best && read(best) > 0 ? { title, unit, heroId: best.hero_id, value: read(best) } : null;
+  }).filter(Boolean);
+}
+
+function statsAwardsHtml(match) {
+  const awards = statsAwards(match);
+  return awards.length === 0 ? '' : `
+    <div class="stat-awards">
+      ${awards.map(award => `<div class="stat-award"><span>${esc(award.title)}</span>${statsHero(award.heroId)}<small>${Number(award.value).toLocaleString()} ${esc(award.unit)}</small></div>`).join('')}
+    </div>`;
+}
+
+// ─── Карта смертей ──────────────────────────────────────────────────────
+
+function deathPoints(deaths, flip) {
+  return deaths
+    .filter(death => death.positionX != null && death.positionY != null)
+    .map(death => {
+      const x = Math.max(0, Math.min(100, ((death.positionX - STATS_MAP_MIN) / STATS_MAP_SIZE) * 100));
+      const y = Math.max(0, Math.min(100, 100 - ((death.positionY - STATS_MAP_MIN) / STATS_MAP_SIZE) * 100));
+      return { x: flip ? 100 - x : x, y: flip ? 100 - y : y, time: death.time };
+    });
+}
+
+// Своя база внизу слева, поэтому чужая половина лежит выше главной диагонали
+function enemyHalfShare(points) {
+  return Math.round((points.filter(point => point.x > point.y).length / Math.max(1, points.length)) * 100);
+}
+
+function deathMapHtml(points, label) {
+  return `
+    <svg class="death-map" viewBox="0 0 100 100" role="img" aria-label="${esc(label)}">
+      <rect width="100" height="100" fill="#0E1118"/>
+      <path d="M0 6 L94 100 L100 100 L100 94 L6 0 L0 0 Z" fill="#17324A"/>
+      <path d="M10 90 L10 10 L90 10 M10 90 L90 90 L90 10 M10 90 L90 10" fill="none" stroke="#39414F" stroke-width="1.4"/>
+      <circle cx="10" cy="90" r="6" fill="#14532D"/>
+      <circle cx="90" cy="10" r="6" fill="#7F1D1D"/>
+      ${points.map(point => `<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="1.7" fill="#F45D66" fill-opacity=".75">${point.time != null ? `<title>${esc(formatClock(point.time))}</title>` : ''}</circle>`).join('')}
+    </svg>`;
+}
+
+function renderMatchDeathMap(m) {
+  const box = document.getElementById('rp-death-map');
+  if (!box) return;
+  const live = getLiveMatchData(m);
+  const detail = live ? playerDetail(live.match, live.player) : null;
+  const points = detail ? deathPoints(detail.deaths, false) : [];
+  box.classList.toggle('hidden', points.length === 0);
+  box.innerHTML = points.length === 0 ? '' : `
+    ${deathMapHtml(points, 'Карта смертей в матче')}
+    <p class="text-sm text-slate-300">Где ты умирал в этом матче: ${points.length} смертей. База Сил Света внизу слева. Наведи на точку, чтобы увидеть время.</p>`;
+}
+
 function renderBoardHtml(match, viewer) {
   const radiant = match.players.filter(p => p.player_slot < 128);
   const dire = match.players.filter(p => p.player_slot >= 128);
   const head = name => `<tr><th>${esc(name)}</th><th>Ур.</th><th>K/D/A</th><th>Нетворс</th><th>LH/DN</th><th>GPM/XPM</th><th>Урон</th><th>Лечение</th><th>Строения</th><th>Предметы</th></tr>`;
   return `
+    ${statsAwardsHtml(match)}
     <div class="overflow-x-auto">
       <table class="stat-table board">
         <thead>${head(`Силы Света${match.radiant_win ? ' (победа)' : ''}`)}</thead>
@@ -308,6 +415,7 @@ async function renderBoard(m) {
   };
   paint();
   renderLeadChart(live.match);
+  renderMatchDeathMap(m);
   await Promise.all([loadItemNames(), draftLoadTitles()]);
   if (currentActiveReplayMatch && currentActiveReplayMatch.match_id === m.match_id) paint();
 }
@@ -331,7 +439,8 @@ function statsHeroRows(list) {
         win: picks > 0 ? wins / picks : 0,
         // В матче 10 героев, поэтому доля пиков умножается на 10
         rate: totalPicks > 0 ? (picks / totalPicks) * 10 : 0,
-        pro: (hero.pro_pick || 0) + (hero.pro_ban || 0)
+        pro: (hero.pro_pick || 0) + (hero.pro_ban || 0),
+        trend: hero.trend || 0
       };
     })
     .sort((a, b) => b[stats.heroSort] - a[stats.heroSort]);
@@ -352,6 +461,7 @@ async function renderHeroesTable() {
         <th>Герой</th>
         <th><button type="button" onclick="statsSortHeroes('win')">Винрейт</button></th>
         <th><button type="button" onclick="statsSortHeroes('rate')">Пикрейт</button></th>
+        <th><button type="button" onclick="statsSortHeroes('trend')">За неделю</button></th>
         <th><button type="button" onclick="statsSortHeroes('picks')">Матчи</button></th>
         <th><button type="button" onclick="statsSortHeroes('pro')">Про-сцена</button></th>
       </tr></thead>
@@ -360,6 +470,7 @@ async function renderHeroesTable() {
           <td>${statsHero(row.id)}</td>
           <td class="${row.win >= 0.52 ? 'pro-win' : ''}">${percent(row.win)}</td>
           <td>${percent(row.rate)}</td>
+          <td class="${row.trend >= 0 ? 'pro-win' : ''}">${row.trend >= 0 ? '+' : '−'}${commaNumber(Math.abs(row.trend * 100).toFixed(1))}%</td>
           <td>${row.picks.toLocaleString()}</td>
           <td>${row.pro.toLocaleString()}</td>
         </tr>`).join('')}</tbody>
@@ -417,6 +528,33 @@ async function statsOpenHero(heroId) {
     </div>
     ${items && itemNames ? `<div class="draft-build">${draftStagesHtml(items)}</div>` : ''}
     ${table ? `<p class="text-xs text-slate-400">Матчапы: ${esc(table.source)}. Предметы: турнирные матчи OpenDota.</p>` : ''}`;
+}
+
+function proToggleFeedback() {
+  document.getElementById('rp-feedback-form').classList.toggle('hidden');
+}
+
+async function proSendFeedback() {
+  const input = document.getElementById('rp-feedback-text');
+  const text = input.value.trim();
+  if (!text) return;
+  const button = document.getElementById('rp-feedback-send');
+  button.disabled = true;
+  let sent = false;
+  try {
+    const res = await fetch('/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, matchId: currentActiveReplayMatch ? currentActiveReplayMatch.match_id : '' })
+    });
+    sent = res.ok;
+  } catch (e) {}
+  button.disabled = false;
+  proToast(sent ? 'Спасибо, сообщение отправлено' : 'Не отправилось, попробуй позже');
+  if (sent) {
+    input.value = '';
+    proToggleFeedback();
+  }
 }
 
 function openHeroes() {

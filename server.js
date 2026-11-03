@@ -156,6 +156,7 @@ async function cached(key, ttl, load) {
 const hits = new Map();
 
 const coachHits = new Map();
+const feedbackHits = new Map();
 
 function overLimit(store, ip, limit) {
   const now = Date.now();
@@ -721,10 +722,23 @@ async function loadMatch(matchId) {
   });
 }
 
+// Разница винрейта между последними и первыми тремя днями недели. Последний день ещё неполный, но матчей в нём достаточно.
+function heroTrend(hero) {
+  const picks = hero.pub_pick_trend;
+  const wins = hero.pub_win_trend;
+  if (!Array.isArray(picks) || !Array.isArray(wins) || picks.length < 6) return 0;
+  const rate = (from, to) => {
+    const games = picks.slice(from, to).reduce((sum, value) => sum + value, 0);
+    return games > 0 ? wins.slice(from, to).reduce((sum, value) => sum + value, 0) / games : 0;
+  };
+  return rate(-3) - rate(0, 3);
+}
+
 // В ответе OpenDota 127 героев с десятками полей, сайту нужны только винрейты по рангам
 function heroStatRow(hero) {
   const row = {
     id: hero.id,
+    trend: heroTrend(hero),
     roles: Array.isArray(hero.roles) ? hero.roles : [],
     pro_pick: hero.pro_pick || 0,
     pro_win: hero.pro_win || 0,
@@ -865,9 +879,32 @@ async function coachAdvice(matchId, heroId, ip) {
   }
 }
 
+// ─── Про-игроки ─────────────────────────────────────────────────────────
+
+// В таблице matches у OpenDota только турнирные матчи. heroId уже проверен как число.
+async function loadProHero(heroId) {
+  return cached(`pro-hero:${heroId}`, TTL.match, async () => {
+    const sql = `SELECT count(*) games, avg(pm.gold_per_min) gpm, avg(pm.xp_per_min) xpm, avg(pm.kills) kills, avg(pm.deaths) deaths, avg(pm.assists) assists,
+      avg(pm.last_hits * 60.0 / NULLIF(m.duration, 0)) lh, avg(pm.hero_damage * 60.0 / NULLIF(m.duration, 0)) dmg, avg(pm.tower_damage) td
+      FROM matches m JOIN player_matches pm USING (match_id)
+      WHERE pm.hero_id = ${heroId} AND m.start_time > extract(epoch from now()) - ${PRO_MONTHS_SECONDS}`;
+    const url = `${config.opendota}/explorer?sql=${encodeURIComponent(sql)}${config.opendotaKey ? `&api_key=${encodeURIComponent(config.opendotaKey)}` : ''}`;
+    const data = await fetchJson('opendota', url);
+    const row = data && Array.isArray(data.rows) ? data.rows[0] : null;
+    if (!row) return { games: 0 };
+    const numbers = {};
+    Object.entries(row).forEach(([key, value]) => { numbers[key] = Number(value) || 0; });
+    return numbers;
+  });
+}
+
 // ─── Статистика за всё время ────────────────────────────────────────────
 
 const OVERVIEW_TTL = 60 * 60 * 1000;
+const PRO_MONTHS_SECONDS = 15552000; // полгода
+const FEEDBACK_MAX_BYTES = 2048;
+const FEEDBACK_PER_MINUTE = 3;
+const FEEDBACK_HOURLY_LIMIT = 20;
 const RECORD_FIELDS = ['kills', 'assists', 'gold_per_min', 'xp_per_min', 'hero_damage', 'tower_damage', 'last_hits'];
 
 async function loadRecord(accountId, field) {
@@ -1006,6 +1043,55 @@ async function notifyVisit(accountId, points) {
   }
 }
 
+const feedbackHour = { resetAt: 0, count: 0 };
+
+function feedbackAllowed() {
+  const now = Date.now();
+  if (feedbackHour.resetAt <= now) {
+    feedbackHour.resetAt = now + 60 * 60 * 1000;
+    feedbackHour.count = 0;
+  }
+  feedbackHour.count += 1;
+  return feedbackHour.count <= FEEDBACK_HOURLY_LIMIT;
+}
+
+async function notifyFeedback(text, matchId) {
+  if (!feedbackAllowed()) return false;
+  try {
+    await fetchJson('telegram', `${config.telegram.api}/bot${config.telegram.token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: config.telegram.chatId,
+        disable_web_page_preview: true,
+        text: `Не согласны с разбором${matchId ? ` матча ${matchId}` : ''}:\n${text}`
+      })
+    });
+    return true;
+  } catch (e) {
+    noteError('telegram', e.message);
+    return false;
+  }
+}
+
+function readBody(req, limit) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const parts = [];
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > limit) {
+        reject(new Error('слишком большой запрос'));
+        req.destroy();
+      } else {
+        parts.push(chunk);
+      }
+    });
+    req.on('end', () => resolve(Buffer.concat(parts).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+
 // ─── HTTP ───────────────────────────────────────────────────────────────
 
 function sendJson(res, status, body, headers = {}) {
@@ -1083,6 +1169,25 @@ async function handleApi(req, res, pathname, url) {
   if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/heroes\/(\d{1,3})\/itemPopularity$/))) {
     const items = await cached(`hero-items:${match[1]}`, TTL.match, () => odGet(`/heroes/${match[1]}/itemPopularity`));
     return sendJson(res, 200, items);
+  }
+
+  if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/pro\/(\d{1,3})$/))) {
+    return sendJson(res, 200, await loadProHero(Number(match[1])));
+  }
+
+  if (req.method === 'POST' && pathname === '/api/feedback') {
+    if (!telegramEnabled()) return sendJson(res, 503, { error: 'Отзывы отключены' });
+    if (overLimit(feedbackHits, clientIp(req), FEEDBACK_PER_MINUTE)) return sendJson(res, 429, { error: 'Слишком много сообщений' });
+    let body;
+    try {
+      body = JSON.parse(await readBody(req, FEEDBACK_MAX_BYTES));
+    } catch (e) {
+      return sendJson(res, 400, { error: 'Некорректный запрос' });
+    }
+    const text = typeof body.text === 'string' ? body.text.trim().slice(0, 500) : '';
+    const matchId = /^\d{6,12}$/.test(String(body.matchId)) ? String(body.matchId) : '';
+    if (!text) return sendJson(res, 400, { error: 'Пустое сообщение' });
+    return (await notifyFeedback(text, matchId)) ? sendJson(res, 200, { ok: true }) : sendJson(res, 503, { error: 'Не отправилось' });
   }
 
   if (req.method === 'POST' && (match = pathname.match(/^\/api\/visit\/(\d{1,10})$/))) {

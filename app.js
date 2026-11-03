@@ -670,6 +670,13 @@ async function analyzePlayer() {
     return;
   }
 
+  if (/\/match(?:es)?\/\d{6,12}/i.test(raw)) {
+    document.getElementById('custom-match-id').value = raw;
+    switchTab('replay');
+    inspectCustomMatch();
+    return;
+  }
+
   setScanning(true, 'Ищу профиль...');
 
   try {
@@ -1843,13 +1850,22 @@ function showReplayNotice(text) {
   box.classList.toggle('hidden', !text);
 }
 
+// Номер матча или ссылка на него с Dotabuff, OpenDota и STRATZ
+function extractMatchId(raw) {
+  const text = String(raw || '').trim();
+  if (/^\d{6,12}$/.test(text)) return text;
+  const found = text.match(/\/match(?:es)?\/(\d{6,12})/i);
+  return found ? found[1] : '';
+}
+
 async function inspectCustomMatch() {
   const input = document.getElementById('custom-match-id');
-  const matchId = input ? input.value.trim() : '';
-  if (!/^\d{6,12}$/.test(matchId)) {
-    showReplayNotice('Match ID должен состоять только из цифр.');
+  const matchId = input ? extractMatchId(input.value) : '';
+  if (!matchId) {
+    showReplayNotice('Вставь номер матча или ссылку на него с Dotabuff, OpenDota или STRATZ.');
     return;
   }
+  if (input) input.value = matchId;
 
   const loading = document.getElementById('replay-loading');
   const container = document.getElementById('replay-container');

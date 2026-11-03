@@ -140,6 +140,20 @@ function draftSuggestions(stats) {
     .slice(0, DRAFT_TOP);
 }
 
+// Средний перевес твоей команды по всем парам союзник и враг
+function draftTeamEdge() {
+  const team = [...draft.ally, ...(draft.myHero ? [draft.myHero] : [])];
+  const edges = [];
+  draft.enemy.forEach(enemyId => {
+    const table = draft.tables.get(enemyId);
+    team.forEach(heroId => {
+      const row = table && table.vs[heroId];
+      if (row && row.games >= DRAFT_MIN_GAMES) edges.push((0.5 - row.wr) * 100);
+    });
+  });
+  return edges.length > 0 ? { value: average(edges), pairs: edges.length } : null;
+}
+
 function draftItemTitle(key) {
   return (draft.itemTitles && draft.itemTitles[key]) || formatItemName(key);
 }
@@ -244,7 +258,9 @@ async function renderDraftSuggestions() {
   const rank = bracket ? `на ранге ${PRO_BRACKETS[bracket]}` : 'на всех рангах';
   const empty = picked.length === 0 ? `Пока это просто сильные герои ${rank}. Отметь пики, и подсказка уточнится.` : `Учтены матчапы и связки, винрейт ${rank} и твои последние игры.`;
 
+  const edge = draftTeamEdge();
   box.innerHTML = `
+    ${edge ? `<p class="draft-edge ${edge.value >= 0 ? 'good' : 'bad'}">Оценка драфта: ${edge.value >= 0 ? '+' : '−'}${commaNumber(Math.abs(edge.value).toFixed(1))}% в среднем по ${edge.pairs} матчапам. Это не шанс на победу.</p>` : ''}
     <p class="text-sm text-slate-400">${esc(empty)}${sources.size > 0 ? ` Источник: ${esc([...sources].join(', '))}.` : ''}</p>
     ${missing.length > 0 ? `<p class="text-sm text-amber-300">Нет данных по героям: ${esc(missing.map(getHeroName).join(', '))}.</p>` : ''}
     <div class="draft-list">

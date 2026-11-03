@@ -6,6 +6,7 @@
 const ANALYST_MIN_GAMES = 30;
 const ANALYST_THROW_LEAD = 5000;
 const ANALYST_MAX_MISSING = 3;
+const ANALYST_TRADE_SECONDS = 15;
 const ANALYST_KEY_ITEMS = new Set([
   'blink', 'overwhelming_blink', 'swift_blink', 'arcane_blink', 'black_king_bar', 'bfury', 'manta', 'desolator',
   'butterfly', 'radiance', 'sphere', 'assault', 'skadi', 'shivas_guard', 'heart', 'satanic', 'abyssal_blade', 'basher',
@@ -124,6 +125,45 @@ function analystLeads(match, side) {
   return { bestLead, bestMinute: mine.indexOf(bestLead), worstLead, worstMinute: mine.indexOf(worstLead) };
 }
 
+// Перелом: минута, после которой победитель больше не уходил в минус по нетворсу
+function analystTurningPoint(match, side) {
+  const leads = (match.details && match.details.leads) || [];
+  if (leads.length < 4) return null;
+  const sign = match.radiant_win ? 1 : -1;
+  let minute = leads.length - 1;
+  while (minute >= 0 && leads[minute] * sign > 0) minute -= 1;
+  const from = minute + 1;
+  if (from >= leads.length - 1) return null;
+  const deficit = Math.min(...leads.map(value => value * sign));
+  const who = side.won ? 'твоя команда' : 'враг';
+  if (deficit <= -ANALYST_THROW_LEAD) {
+    return analystLine(`Перелом на ${from} минуте: ${who} отыграл${side.won ? 'а' : ''} −${analystThousands(deficit)} и больше не отдавал${side.won ? 'а' : ''} лидерство.`, side.won ? 'good' : 'bad');
+  }
+  return from > 2 ? analystLine(`Перелом на ${from} минуте: с этого момента ${who} вёл${side.won ? 'а' : ''} по нетворсу до конца.`, side.won ? 'good' : 'bad') : null;
+}
+
+function analystLaneRival(match, viewer, side) {
+  if (!viewer.position) return null;
+  const rival = side.enemies.find(p => p.position === viewer.position);
+  const mine = playerDetail(match, viewer);
+  const theirs = rival ? playerDetail(match, rival) : null;
+  if (!mine || !theirs || mine.networth.length <= 10 || theirs.networth.length <= 10) return null;
+  const gap = mine.networth[10] - theirs.networth[10];
+  return analystLine(`К 10 минуте: нетворс ${mine.networth[10].toLocaleString()} против ${theirs.networth[10].toLocaleString()} у ${getHeroName(rival.hero_id)}.`, gap >= 0 ? 'good' : 'bad');
+}
+
+// Размен: союзники убили кого-то за 15 секунд до смерти игрока или сразу после неё
+function analystTrades(match, viewer, side) {
+  const detail = playerDetail(match, viewer);
+  if (!detail || detail.deaths.length === 0) return null;
+  const kills = side.allies.flatMap(player => {
+    const row = playerDetail(match, player);
+    return row ? row.kills.map(kill => kill.time) : [];
+  });
+  const lost = detail.deaths.filter(death => !kills.some(time => Math.abs(time - death.time) <= ANALYST_TRADE_SECONDS)).length;
+  return analystLine(`Смертей без размена: ${lost} из ${detail.deaths.length}.`, lost / detail.deaths.length >= 0.5 ? 'bad' : 'good');
+}
+
 function analystFarm(match, viewer, side) {
   const lines = [];
   const gpm = analystMean(side.allies, 'gold_per_min');
@@ -139,6 +179,12 @@ function analystFarm(match, viewer, side) {
     if (leads.bestLead > 0) lines.push(analystLine(`Максимальный нетворс в твою пользу: +${analystThousands(leads.bestLead)} на ${leads.bestMinute} минуте.`));
     if (leads.worstLead < 0) lines.push(analystLine(`Максимальное отставание: −${analystThousands(leads.worstLead)} на ${leads.worstMinute} минуте.`));
   }
+
+  const turn = analystTurningPoint(match, side);
+  if (turn) lines.push(turn);
+
+  const rival = analystLaneRival(match, viewer, side);
+  if (rival) lines.push(rival);
 
   const timings = analystKeyTimings(match, viewer);
   if (timings.length > 0) {
@@ -163,6 +209,9 @@ function analystFights(match, viewer, side) {
     const share = ((viewer.kills || 0) + (viewer.assists || 0)) / kills;
     lines.push(analystLine(`Твоё участие в убийствах: ${Math.round(share * 100)}%, KDA ${viewer.kills || 0}/${viewer.deaths || 0}/${viewer.assists || 0}.`, share >= 0.6 ? 'good' : share < 0.45 ? 'bad' : ''));
   }
+
+  const trades = analystTrades(match, viewer, side);
+  if (trades) lines.push(trades);
 
   const withImp = match.players
     .map(player => ({ player, detail: playerDetail(match, player) }))
@@ -313,6 +362,7 @@ async function renderAnalyst(m) {
   };
   showBasic();
 
+  document.getElementById('rp-feedback').classList.toggle('hidden', !proState.telegram);
   const heroes = [...side.enemies.map(p => p.hero_id), player.hero_id];
   await Promise.all([...heroes.map(draftTable), loadItemNames(), draftLoadTitles()]);
   if (token !== analystToken) return;
