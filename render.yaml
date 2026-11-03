@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: dota-mmr-checker
+    runtime: node
+    plan: free
+    buildCommand: "true"
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: TRUST_PROXY
+        value: "1"
+      - key: STEAM_API_KEY
+        sync: false
+      - key: STRATZ_TOKEN
+        sync: false
+      - key: OPENDOTA_API_KEY
+        sync: false

@@ -1,0 +1,9 @@
+{
+  "name": "dota-mmr-checker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dota 2 True Skill",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}
