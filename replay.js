@@ -33,6 +33,8 @@ const REPLAY_TURN_EVEN = 6000;
 const REPLAY_TURN_GAP = 180;
 const REPLAY_TURN_CELLS = 25;
 const REPLAY_TURN_SWING = 1500;
+const REPLAY_TURN_DEATHS = 2;
+const REPLAY_TURN_WIPE = 4;
 const REPLAY_TURN_FOLLOW = 120;
 const REPLAY_LANE_LEAD = 2000;
 const REPLAY_HEAL_ITEMS = {
@@ -533,9 +535,10 @@ function replayLostFightTurn(group, side, score) {
     && item.radiant === side.radiant && item.type !== 'OUTPOST' && item.type !== 'FORT').length;
   const roshan = replay.roshan.deaths.some(([time]) => time >= group.from && time <= until);
   const fixes = [];
+  if (group.ours.length >= REPLAY_TURN_WIPE) fixes.push('Команда легла почти вся: отступать надо было сразу, как только упал первый герой.');
   if (absent.length > 0) fixes.push(`Собраться вместе: ${replayNames(absent)} ${absent.length > 1 ? 'были' : 'был'} далеко. Без них в драку заходить не стоило.`);
   if (roshan) fixes.push('Сразу после драки враг забрал Рошана: нужен был выкуп или отход к логову заранее.');
-  if (fell > 0) fixes.push(`После драки упало зданий: ${fell}. Нужен был выкуп, чтобы защитить их.`);
+  if (fell > 0) fixes.push(`После драки упало зданий: ${fell}. Нужен был выкуп, чтобы их защитить.`);
   if (fixes.length === 0) fixes.push('Перед дракой проверить, готовы ли главные умения и предметы. Если нет, отойти к вышке и дождаться команды.');
   return {
     tone: 'bad',
@@ -577,7 +580,8 @@ function buildReplayTurns() {
   const side = analystSide(replay.match, replay.viewer);
   const direction = side.won ? 1 : -1;
   const candidates = replayFightGroups().map(group => {
-    const decisive = side.won ? group.theirs.length > group.ours.length : group.ours.length > group.theirs.length;
+    const [mine, other] = side.won ? [group.theirs, group.ours] : [group.ours, group.theirs];
+    const decisive = mine.length >= REPLAY_TURN_DEATHS && mine.length > other.length;
     const before = replayLead(group.from / 60 - REPLAY_TURN_BEFORE);
     const after = replayLead(group.to / 60 + REPLAY_TURN_AFTER);
     if (!decisive || before == null || after == null) return null;
@@ -588,8 +592,8 @@ function buildReplayTurns() {
       time: group.from,
       weight: swing * (even ? 1.4 : 1),
       gain: even
-        ? `До драки игра была равной (${replayLeadText(before)}), после ${replayLeadText(after)}. ${side.won ? 'Здесь игра качнулась к вам.' : 'Здесь её ещё можно было удержать.'}`
-        : `Отрыв изменился с ${replayLeadText(before)} до ${replayLeadText(after)}.`
+        ? `Отрыв до драки ${replayLeadText(before)}, после ${replayLeadText(after)}. ${side.won ? 'Здесь игра качнулась к вам.' : 'Игра была открытой, здесь её можно было удержать.'}`
+        : `Отрыв до драки ${replayLeadText(before)}, после ${replayLeadText(after)}`
     };
     return side.won ? replayWonFightTurn(group, side, score) : replayLostFightTurn(group, side, score);
   }).filter(Boolean);
