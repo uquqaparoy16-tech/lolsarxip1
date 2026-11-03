@@ -76,6 +76,12 @@
     .pro-coach p { font-size: .9rem; line-height: 1.55; color: #CBD5E1; }
     .pro-coach p + p { margin-top: .45rem; }
     .pro-coach strong { color: #fff; }
+    .pro-habits { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); }
+    .pro-habit { padding: .75rem .85rem; border-radius: .7rem; background: rgba(0, 0, 0, .35); border: 1px solid rgba(255, 255, 255, .06); border-left: 3px solid #34D399; }
+    .pro-habit.bad { border-left-color: #F0444F; }
+    .pro-habit strong { display: block; font-size: .875rem; color: #fff; }
+    .pro-habit span { display: block; font-size: .75rem; color: #A3ACBB; }
+    .pro-habit p { margin-top: .35rem; font-size: .8rem; line-height: 1.45; color: #CBD5E1; }
     .pro-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
     .pro-table th, .pro-table td { padding: .5rem .6rem; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, .06); }
     .pro-table thead th { color: #fff; font-weight: 600; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -604,6 +610,17 @@
         </div>
 
         <div id="goal-box" class="hidden glass rounded-2xl p-6 space-y-3 border-uc-red/25"></div>
+
+        <div id="habits-card" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-4 border-uc-red/25">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+              <h3 class="font-outfit font-bold text-lg text-white">Что повторяется из игры в игру</h3>
+              <p class="text-sm text-slate-400">Сайт просмотрит все твои матчи и найдёт ошибки, которые ты делаешь снова и снова.</p>
+            </div>
+            <button id="habits-btn" type="button" class="pro-btn" onclick="proLoadHabits()">Найти повторяющиеся ошибки</button>
+          </div>
+          <div id="habits-result" class="space-y-3" aria-live="polite"></div>
+        </div>
 
         <div id="bench-card" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-4">
           <div>

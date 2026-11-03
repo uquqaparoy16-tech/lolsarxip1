@@ -40,13 +40,26 @@ const proState = {
   pendingMatch: new URLSearchParams(location.search).get('match'),
   installPrompt: null,
   compareToken: 0,
-  compareId: null
+  compareId: null,
+  habitsToken: 0
 };
 
 // ─── Общее ──────────────────────────────────────────────────────────────
 
 function perMinute(m, value) {
   return value != null && m.duration > 0 ? value / (m.duration / 60) : null;
+}
+
+function gamesWord(count) {
+  const tens = count % 100;
+  const ones = count % 10;
+  if (tens >= 11 && tens <= 14) return `${count} игр`;
+  if (ones === 1) return `${count} игра`;
+  return ones >= 2 && ones <= 4 ? `${count} игры` : `${count} игр`;
+}
+
+function commaNumber(value) {
+  return String(value).replace('.', ',');
 }
 
 function proToast(text) {
@@ -247,8 +260,8 @@ function heroBracketWinrate(hero, bracket) {
 }
 
 function fitsMainRole(hero, isSupportMain) {
-  const roles = hero.roles || [];
-  return isSupportMain ? roles.includes('Support') : !roles.includes('Support') || roles.includes('Carry');
+  const role = (HEROES_DB[hero.id] && HEROES_DB[hero.id].role) || '';
+  return role.includes('Support') === isSupportMain;
 }
 
 function heroChip(heroId, caption) {
@@ -292,7 +305,7 @@ async function renderMetaCard(matches, tier, audit) {
         <img loading="lazy" decoding="async" src="${getHeroIcon(h.heroId)}" alt="">
         <span>${esc(getHeroName(h.heroId))}</span>
         <strong class="${tone}">${own}%</strong>
-        <small>${h.games} игр, у всех ${base}%</small>
+        <small>${gamesWord(h.games)}, у всех ${base}%</small>
       </div>`;
   }).join('');
 
@@ -343,6 +356,12 @@ function renderGradeStrip(matches) {
 
 const proGoalKey = () => `dota-goal-${currentAccountId}`;
 
+// Смерти и золото в матче целые, поэтому и цель целая. KDA оставляем с дробью.
+function goalValue(item) {
+  if (item.metricKey === 'kda') return item.goal;
+  return item.metricKey === 'deaths' ? Math.floor(item.goal) : Math.ceil(item.goal);
+}
+
 function goalCandidates(audit) {
   return audit ? audit.problems.filter(p => p.metricKey && PRO_GOAL_TEXT[p.metricKey]).slice(0, 3) : [];
 }
@@ -350,7 +369,7 @@ function goalCandidates(audit) {
 function proSetGoal(index) {
   const item = goalCandidates(proState.audit)[index];
   if (!item) return;
-  proWrite(proGoalKey(), { key: item.metricKey, goal: item.goal, createdAt: Math.floor(Date.now() / 1000) });
+  proWrite(proGoalKey(), { key: item.metricKey, goal: goalValue(item), createdAt: Math.floor(Date.now() / 1000) });
   renderGoalBox();
   proToast('Цель сохранена в этом браузере');
 }
@@ -373,7 +392,7 @@ function renderGoalBox() {
       <h3 class="font-outfit font-bold text-lg text-white">Цель на следующие игры</h3>
       <p class="text-sm text-slate-400">Выбери одну цель. После новых игр нажми «СКАН», и сайт сам проверит, получилось ли.</p>
       <div class="flex flex-wrap gap-2">
-        ${candidates.map((item, i) => `<button type="button" class="pro-btn" onclick="proSetGoal(${i})">${esc(PRO_GOAL_TEXT[item.metricKey](item.goal))}</button>`).join('')}
+        ${candidates.map((item, i) => `<button type="button" class="pro-btn" onclick="proSetGoal(${i})">${esc(PRO_GOAL_TEXT[item.metricKey](goalValue(item)))}</button>`).join('')}
       </div>`;
     return;
   }
@@ -400,6 +419,130 @@ function renderGoalBox() {
     ${games.length > 0 ? `<div class="pro-dots">${games.map(m => `<span class="${passed(m) ? 'good' : 'bad'}" title="${esc(getHeroName(m.hero_id))}"></span>`).join('')}</div>` : ''}`;
 }
 
+// ─── Повторяющиеся ошибки ───────────────────────────────────────────────
+
+const PRO_HABIT_WORKERS = 3;
+const PRO_HABIT_MIN_MATCHES = 3;
+
+function buildHabits(games) {
+  const rows = games.map(getLiveMatchData).filter(Boolean).map(live => ({ live, detail: playerDetail(live.match, live.player) })).filter(row => row.detail);
+  if (rows.length < PRO_HABIT_MIN_MATCHES) return null;
+
+  const lanes = rows.map(row => laneResult(row.live.match, row.live.player)).filter(Boolean);
+  const deaths = rows.flatMap(row => row.detail.deaths);
+  const count = test => deaths.filter(test).length;
+  const early = count(d => d.time < 600);
+  const heal = count(d => d.hasHealAvailable);
+  const burst = count(d => d.isBurst);
+  const caught = count(d => d.isEngagedOnDeath === false);
+  const gold = deaths.reduce((sum, d) => sum + (d.goldLost || 0), 0);
+  const lost = lanes.filter(result => result === 'loss').length;
+  const won = lanes.filter(result => result === 'win').length;
+  const share = value => (deaths.length > 0 ? value / deaths.length : 0);
+  const perGame = value => value / rows.length;
+
+  const habits = [];
+  if (lanes.length > 0) {
+    habits.push({
+      score: lanes.length > 0 ? (lost - won) / lanes.length : 0,
+      bad: lost > won,
+      title: `Линия: проиграно ${lost}, выиграно ${won}`,
+      fact: `Итог известен в ${gamesWord(lanes.length).replace(/игры$/, 'играх').replace(/игр$/, 'играх').replace(/игра$/, 'игре')}.`,
+      advice: 'Первые 10 минут важнее всего: держись у своей вышки и добивай крипов, пока не появится преимущество.'
+    });
+  }
+  if (deaths.length > 0) {
+    habits.push({
+      score: perGame(early) - 1,
+      bad: perGame(early) >= 1,
+      title: `Смертей до 10 минуты за игру: ${commaNumber(perGame(early).toFixed(1))}`,
+      fact: `${early} из ${deaths.length} смертей.`,
+      advice: 'Ранняя смерть дороже всего: враг получает золото, а ты теряешь опыт на линии.'
+    });
+    habits.push({
+      score: share(caught) - 0.25,
+      bad: share(caught) >= 0.25,
+      title: `Поймали вне драки: ${Math.round(share(caught) * 100)}% смертей`,
+      fact: `${caught} из ${deaths.length} смертей.`,
+      advice: 'Перед походом в лес смотри, кого нет на карте. Если врагов не видно, не отходи от союзников.'
+    });
+    habits.push({
+      score: perGame(heal) - 0.5,
+      bad: perGame(heal) >= 0.5,
+      title: `Смертей с готовым лечением: ${heal}`,
+      fact: `За ${gamesWord(rows.length)}.`,
+      advice: 'Нажимай лечение раньше, когда здоровья ещё половина: после оглушения будет поздно.'
+    });
+    habits.push({
+      score: share(burst) - 0.35,
+      bad: share(burst) >= 0.35,
+      title: `Убили за секунды: ${Math.round(share(burst) * 100)}% смертей`,
+      fact: `${burst} из ${deaths.length} смертей.`,
+      advice: 'Стой дальше от врага в начале драки и купи предмет на выживание раньше.'
+    });
+    habits.push({
+      score: perGame(gold) / 1000 - 1,
+      bad: perGame(gold) >= 1000,
+      title: `Потеряно на смертях: ${Math.round(perGame(gold)).toLocaleString()} золота за игру`,
+      fact: `Всего ${gold.toLocaleString()} за ${gamesWord(rows.length)}.`,
+      advice: 'Перед дракой трать золото: потерять можно только то, что лежит в кармане.'
+    });
+  }
+  return { games: rows.length, habits: habits.sort((a, b) => b.score - a.score) };
+}
+
+function renderHabits(result) {
+  const box = document.getElementById('habits-result');
+  if (!result) {
+    box.innerHTML = '<p class="text-sm text-amber-300">Подробных данных пока мало: нужно хотя бы 3 матча, разобранных STRATZ. Попробуй позже.</p>';
+    return;
+  }
+  box.innerHTML = `
+    <p class="text-sm text-slate-400">Разобрано матчей: ${result.games}. Сверху то, что мешает сильнее всего.</p>
+    <div class="pro-habits">
+      ${result.habits.map(item => `
+        <div class="pro-habit ${item.bad ? 'bad' : 'good'}">
+          <strong>${esc(item.title)}</strong>
+          <span>${esc(item.fact)}</span>
+          ${item.bad ? `<p>${esc(item.advice)}</p>` : ''}
+        </div>`).join('')}
+    </div>`;
+}
+
+async function proLoadHabits() {
+  const button = document.getElementById('habits-btn');
+  const box = document.getElementById('habits-result');
+  if (!button || !box) return;
+  const token = ++proState.habitsToken;
+  const games = pickScoredMatches(currentMatches).slice();
+  const queue = games.slice();
+  let done = 0;
+
+  button.disabled = true;
+  box.innerHTML = '<p class="text-sm text-slate-400">Смотрю матчи...</p>';
+
+  const worker = async () => {
+    while (queue.length > 0 && token === proState.habitsToken) {
+      const m = queue.shift();
+      const known = REAL_MATCH_CACHE[m.match_id];
+      if (!(known && known.__live)) {
+        const data = await proFetchJson(`/matches/${m.match_id}`);
+        if (data && Array.isArray(data.players) && data.players.length >= 10) {
+          data.__live = true;
+          REAL_MATCH_CACHE[m.match_id] = data;
+        }
+      }
+      done += 1;
+      if (token === proState.habitsToken) box.innerHTML = `<p class="text-sm text-slate-400">Смотрю матчи: ${done} из ${games.length}...</p>`;
+    }
+  };
+  await Promise.all(Array.from({ length: PRO_HABIT_WORKERS }, worker));
+  if (token !== proState.habitsToken) return;
+
+  button.disabled = false;
+  renderHabits(buildHabits(games));
+}
+
 // ─── Тренер ─────────────────────────────────────────────────────────────
 
 function coachTask(match, viewer) {
@@ -419,8 +562,9 @@ function coachRuleText(match, viewer) {
   const won = (viewer.player_slot < 128) === !!match.radiant_win;
   const detail = playerDetail(match, viewer);
   const grade = detail && detail.imp != null ? ` Оценка ${gradeFromImp(detail.imp)}.` : '';
+  const top = good[0] || mistakes[1] || '';
   return [
-    { label: 'Главное', text: `${won ? 'Победа' : 'Поражение'}.${grade} ${good[0] || mistakes[0] || 'Показатели близки к команде.'}` },
+    { label: 'Главное', text: `${won ? 'Победа' : 'Поражение'}.${grade} ${top}`.trim() },
     { label: 'Ошибка', text: mistakes[0] || 'Явных ошибок в цифрах нет.' },
     { label: 'Задача', text: coachTask(match, viewer) }
   ];
@@ -571,8 +715,8 @@ async function proCompare() {
     ['Винрейт', `${me.winrate}%`, `${friend.winrate}%`, me.winrate - friend.winrate],
     ['Золото в минуту', me.gpm, friend.gpm, me.gpm - friend.gpm],
     ['Опыт в минуту', me.xpm, friend.xpm, me.xpm - friend.xpm],
-    ['KDA', me.kda, friend.kda, me.kda - friend.kda],
-    ['Смерти за матч', me.deaths, friend.deaths, friend.deaths - me.deaths],
+    ['KDA', commaNumber(me.kda), commaNumber(friend.kda), me.kda - friend.kda],
+    ['Смерти за матч', commaNumber(me.deaths), commaNumber(friend.deaths), friend.deaths - me.deaths],
     ['Урон по вышкам', me.towerDamage.toLocaleString(), friend.towerDamage.toLocaleString(), me.towerDamage - friend.towerDamage]
   ];
   const myWins = rows.filter(r => r[3] > 0).length;
@@ -741,6 +885,10 @@ function proOnDashboard(profile, matches, skill, audit) {
   document.getElementById('pro-share').classList.toggle('hidden', !proState.summary);
   document.getElementById('compare-card').classList.toggle('hidden', !proState.summary);
   document.getElementById('compare-result').innerHTML = '';
+  proState.habitsToken += 1;
+  document.getElementById('habits-result').innerHTML = '';
+  document.getElementById('habits-btn').disabled = false;
+  document.getElementById('habits-card').classList.toggle('hidden', !matches.some(m => m.imp != null));
 
   saveRecentPlayer(profile);
   renderGradeStrip(matches);
