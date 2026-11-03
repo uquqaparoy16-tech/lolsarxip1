@@ -75,6 +75,12 @@ const config = {
   steamKey,
   stratzToken,
   opendotaKey: process.env.OPENDOTA_API_KEY || '',
+  telegram: {
+    token: cleanSecret(process.env.TELEGRAM_BOT_TOKEN),
+    chatId: String(process.env.TELEGRAM_CHAT_ID || '').trim(),
+    api: process.env.TELEGRAM_API || 'https://api.telegram.org'
+  },
+  siteUrl: process.env.SITE_URL || 'https://dota-mmr-checker.onrender.com',
   ai: {
     key: cleanSecret(process.env.AI_API_KEY),
     folder: String(process.env.AI_FOLDER_ID || '').trim(),
@@ -89,7 +95,7 @@ const config = {
 
 if (!config.ai.model && config.ai.folder) config.ai.model = `gpt://${config.ai.folder}/yandexgpt-lite/latest`;
 
-const lastErrors = { opendota: null, stratz: null, steam: null, ai: null };
+const lastErrors = { opendota: null, stratz: null, steam: null, ai: null, telegram: null };
 let lastSteamCheck = null;
 
 class UpstreamError extends Error {
@@ -850,6 +856,53 @@ async function coachAdvice(matchId, heroId, ip) {
   }
 }
 
+// ─── Уведомления в Telegram ─────────────────────────────────────────────
+
+const VISIT_REPEAT_MS = 10 * 60 * 1000; // один игрок не чаще раза в 10 минут
+const VISIT_HOURLY_LIMIT = 60;
+const visitSeen = new Map();
+const visitHour = { resetAt: 0, count: 0 };
+
+const telegramEnabled = () => !!(config.telegram.token && config.telegram.chatId);
+
+function visitAllowed(accountId) {
+  const now = Date.now();
+  for (const [id, at] of visitSeen) {
+    if (now - at >= VISIT_REPEAT_MS) visitSeen.delete(id);
+  }
+  if (visitSeen.has(accountId)) return false;
+  if (visitHour.resetAt <= now) {
+    visitHour.resetAt = now + 60 * 60 * 1000;
+    visitHour.count = 0;
+  }
+  if (visitHour.count >= VISIT_HOURLY_LIMIT) return false;
+  visitHour.count += 1;
+  visitSeen.set(accountId, now);
+  return true;
+}
+
+// Текст без разметки: ник задаёт сам игрок. В адресе лежит токен, поэтому в ошибку он не попадает.
+async function notifyVisit(accountId, points) {
+  const hit = cache.get(`player:${accountId}`);
+  if (!telegramEnabled() || !hit || hit.expires <= Date.now() || !visitAllowed(accountId)) return;
+
+  const info = (hit.value.profile && hit.value.profile.profile) || {};
+  const name = String(info.personaname || 'Без ника').slice(0, 64);
+  try {
+    await fetchJson('telegram', `${config.telegram.api}/bot${config.telegram.token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: config.telegram.chatId,
+        disable_web_page_preview: true,
+        text: `На сайте посмотрели ПТС\nИгрок: ${name}\nID: ${accountId}\nОценка: ~${points} ПТС\n${config.siteUrl}/?id=${accountId}`
+      })
+    });
+  } catch (e) {
+    noteError('telegram', e.message);
+  }
+}
+
 // ─── HTTP ───────────────────────────────────────────────────────────────
 
 function sendJson(res, status, body, headers = {}) {
@@ -876,7 +929,7 @@ async function handleApi(req, res, pathname, url) {
 
   if (req.method === 'GET' && pathname === '/api/health') {
     return sendJson(res, 200, {
-      sources: { opendota: true, stratz: !!config.stratzToken, steam: !!config.steamKey, ai: aiEnabled() },
+      sources: { opendota: true, stratz: !!config.stratzToken, steam: !!config.steamKey, ai: aiEnabled(), telegram: telegramEnabled() },
       lastErrors,
       steamCheck: lastSteamCheck
     });
@@ -906,6 +959,13 @@ async function handleApi(req, res, pathname, url) {
     if (!/^\d{1,3}$/.test(heroId)) return sendJson(res, 400, { error: 'Некорректный запрос' });
     const data = await cached(`benchmarks:${heroId}`, TTL.match, () => fetchJson('opendota', `${config.opendota}/benchmarks?hero_id=${heroId}${config.opendotaKey ? `&api_key=${encodeURIComponent(config.opendotaKey)}` : ''}`));
     return sendJson(res, 200, data);
+  }
+
+  if (req.method === 'POST' && (match = pathname.match(/^\/api\/visit\/(\d{1,10})$/))) {
+    const points = String(url.searchParams.get('pts') || '');
+    if (!/^\d{1,5}$/.test(points)) return sendJson(res, 400, { error: 'Некорректный запрос' });
+    notifyVisit(match[1], points); // посетитель не ждёт ответа Telegram
+    return sendJson(res, 200, { ok: true });
   }
 
   if (req.method === 'GET' && (match = pathname.match(/^\/api\/coach\/(\d{6,12})\/(\d{1,3})$/))) {
@@ -998,7 +1058,7 @@ if (require.main === module) {
 
   server.listen(config.port, config.host, () => {
     console.log(`Сайт: http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.port}`);
-    console.log(`STRATZ: ${config.stratzToken ? 'подключён' : 'нет токена'}, Steam: ${config.steamKey ? 'подключён' : 'нет ключа'}, нейросеть: ${aiEnabled() ? 'подключена' : 'нет ключа'}`);
+    console.log(`STRATZ: ${config.stratzToken ? 'подключён' : 'нет токена'}, Steam: ${config.steamKey ? 'подключён' : 'нет ключа'}, нейросеть: ${aiEnabled() ? 'подключена' : 'нет ключа'}, Telegram: ${telegramEnabled() ? 'подключён' : 'нет токена'}`);
     console.log(`Проверка .env: длина ключа Steam ${config.steamKey.length} (нужно 32), длина токена STRATZ ${config.stratzToken.length}`);
     if (steamKeyMoved) console.log('Ключ Steam стоял в строке STRATZ_TOKEN: сервер распознал его и использует как ключ Steam.');
   });

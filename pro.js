@@ -891,6 +891,9 @@ function proOnDashboard(profile, matches, skill, audit) {
   document.getElementById('habits-card').classList.toggle('hidden', !matches.some(m => m.imp != null));
 
   saveRecentPlayer(profile);
+  if (SERVER_MODE && currentAccountId && proState.summary) {
+    fetch(`/api/visit/${currentAccountId}?pts=${proState.summary.skill.trueMMR}`, { method: 'POST', keepalive: true }).catch(() => {});
+  }
   renderGradeStrip(matches);
   renderGoalBox();
   renderBenchCard(matches);
