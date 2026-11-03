@@ -2002,6 +2002,17 @@ function buildStoryFromRealMatch(realMatch, viewerHeroId, viewerSlot) {
     e.calcRuin = (d * 4.0) + Math.max(0, (650 - gpm) * 0.03) - (k * 2.0) - (as * 1.0) - (td * 0.003);
   });
 
+  // Если у всей команды есть настоящий IMP от STRATZ, ранжируем по нему, а не по своей формуле.
+  [allies, enemies].forEach(team => {
+    const imps = team.map(p => {
+      const detail = playerDetail(realMatch, p);
+      return detail && typeof detail.imp === 'number' ? detail.imp : null;
+    });
+    if (imps.length > 0 && imps.every(imp => imp !== null)) {
+      team.forEach((p, i) => { p.calcImpact = imps[i]; p.calcRuin = -imps[i]; });
+    }
+  });
+
   const sortedAlliesByImpact = [...allies].sort((a, b) => b.calcImpact - a.calcImpact);
   const sortedAlliesByRuin = [...allies].sort((a, b) => b.calcRuin - a.calcRuin);
   const sortedEnemiesByImpact = [...enemies].sort((a, b) => b.calcImpact - a.calcImpact);
@@ -2151,7 +2162,7 @@ function buildRealMoments(match, durationStr, viewer) {
     }
     const swing = worstSwing(details.leads, viewer.player_slot < 128);
     if (swing) {
-      moments.push({ time: `${swing.minute}:00`, phase: 'ПЕРЕЛОМ', title: 'Резкая потеря золота', desc: `Команда потеряла ${Math.abs(swing.change).toLocaleString()} золота за 3 минуты.` });
+      moments.push({ time: formatClock(Math.min(swing.minute * 60, match.duration || Infinity)), phase: 'ПЕРЕЛОМ', title: 'Резкая потеря золота', desc: `Команда потеряла ${Math.abs(swing.change).toLocaleString()} золота за 3 минуты.` });
     }
     const detail = playerDetail(match, viewer);
     if (detail && detail.deaths.length > 0) {
@@ -2170,7 +2181,8 @@ function buildRealMoments(match, durationStr, viewer) {
     title: match.radiant_win ? 'Победа сил Света' : 'Победа сил Тьмы',
     desc: match.radiant_score != null ? `Итоговый счёт: ${match.radiant_score} : ${match.dire_score}.` : 'Матч завершён.'
   });
-  return moments;
+  const seconds = clock => String(clock).split(':').reduce((sum, part) => sum * 60 + (Number(part) || 0), 0);
+  return moments.sort((a, b) => seconds(a.time) - seconds(b.time));
 }
 
 const POSITION_NAMES = { 1: 'Лёгкая', 2: 'Центр', 3: 'Сложная', 4: 'Поддержка', 5: 'Полная поддержка' };
