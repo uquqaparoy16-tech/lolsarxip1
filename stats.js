@@ -20,8 +20,6 @@ const STATS_RECORDS = {
 };
 const STATS_ITEM_SLOTS = ['item_0', 'item_1', 'item_2', 'item_3', 'item_4', 'item_5'];
 
-const STATS_MAP_MIN = 64; // игровая сетка STRATZ идёт от 64 до 192
-const STATS_MAP_SIZE = 128;
 const STATS_SMURF_WIN = 65;
 const STATS_SMURF_GAP = 600;
 const STATS_SMURF_GAMES = 150;
@@ -308,47 +306,6 @@ function statsAwardsHtml(match) {
     <div class="stat-awards">
       ${awards.map(award => `<div class="stat-award"><span>${esc(award.title)}</span>${statsHero(award.heroId)}<small>${Number(award.value).toLocaleString()} ${esc(award.unit)}</small></div>`).join('')}
     </div>`;
-}
-
-// ─── Карта смертей ──────────────────────────────────────────────────────
-
-function deathPoints(deaths, flip) {
-  return deaths
-    .filter(death => death.positionX != null && death.positionY != null)
-    .map(death => {
-      const x = Math.max(0, Math.min(100, ((death.positionX - STATS_MAP_MIN) / STATS_MAP_SIZE) * 100));
-      const y = Math.max(0, Math.min(100, 100 - ((death.positionY - STATS_MAP_MIN) / STATS_MAP_SIZE) * 100));
-      return { x: flip ? 100 - x : x, y: flip ? 100 - y : y, time: death.time };
-    });
-}
-
-// Своя база внизу слева, поэтому чужая половина лежит выше главной диагонали
-function enemyHalfShare(points) {
-  return Math.round((points.filter(point => point.x > point.y).length / Math.max(1, points.length)) * 100);
-}
-
-function deathMapHtml(points, label) {
-  return `
-    <svg class="death-map" viewBox="0 0 100 100" role="img" aria-label="${esc(label)}">
-      <rect width="100" height="100" fill="#0E1118"/>
-      <path d="M0 6 L94 100 L100 100 L100 94 L6 0 L0 0 Z" fill="#17324A"/>
-      <path d="M10 90 L10 10 L90 10 M10 90 L90 90 L90 10 M10 90 L90 10" fill="none" stroke="#39414F" stroke-width="1.4"/>
-      <circle cx="10" cy="90" r="6" fill="#14532D"/>
-      <circle cx="90" cy="10" r="6" fill="#7F1D1D"/>
-      ${points.map(point => `<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="1.7" fill="#F45D66" fill-opacity=".75">${point.time != null ? `<title>${esc(formatClock(point.time))}</title>` : ''}</circle>`).join('')}
-    </svg>`;
-}
-
-function renderMatchDeathMap(m) {
-  const box = document.getElementById('rp-death-map');
-  if (!box) return;
-  const live = getLiveMatchData(m);
-  const detail = live ? playerDetail(live.match, live.player) : null;
-  const points = detail ? deathPoints(detail.deaths, false) : [];
-  box.classList.toggle('hidden', points.length === 0);
-  box.innerHTML = points.length === 0 ? '' : `
-    ${deathMapHtml(points, 'Карта смертей в матче')}
-    <p class="text-sm text-slate-300">Где ты умирал в этом матче: ${points.length} смертей. База Сил Света внизу слева. Наведи на точку, чтобы увидеть время.</p>`;
 }
 
 function renderBoardHtml(match, viewer) {

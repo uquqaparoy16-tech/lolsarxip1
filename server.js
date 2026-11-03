@@ -28,6 +28,7 @@ const STATIC_FILES = {
   '/draft.js': 'draft.js',
   '/analyst.js': 'analyst.js',
   '/stats.js': 'stats.js',
+  '/map.js': 'map.js',
   '/styles.css': 'styles.css',
   '/sw.js': 'sw.js',
   '/manifest.webmanifest': 'manifest.webmanifest',
@@ -948,6 +949,43 @@ async function loadOverview(accountId) {
   });
 }
 
+// ─── 2D-повтор ──────────────────────────────────────────────────────────
+
+const PLAYBACK_STEP_SECONDS = 5; // точки реже: для движения на карте этого хватает, а ответ в разы меньше
+const STRATZ_PLAYBACK_QUERY = `query Playback($id: Long!) {
+  match(id: $id) {
+    players { heroId playbackData { playerUpdatePositionEvents { time x y } } }
+  }
+}`;
+
+function thinPositions(events) {
+  const points = [];
+  let next = -Infinity;
+  (events || []).forEach(event => {
+    if (event.time < next) return;
+    points.push([event.time, event.x, event.y]);
+    next = event.time + PLAYBACK_STEP_SECONDS;
+  });
+  return points;
+}
+
+async function stratzPlayback(matchId) {
+  const data = await stratzQuery(STRATZ_PLAYBACK_QUERY, { id: Number(matchId) });
+  const players = data && data.match && data.match.players;
+  if (!Array.isArray(players)) return null;
+  const heroes = {};
+  players.forEach(player => {
+    const points = thinPositions(player.playbackData && player.playbackData.playerUpdatePositionEvents);
+    if (points.length > 0) heroes[player.heroId] = points;
+  });
+  return Object.keys(heroes).length > 0 ? heroes : null;
+}
+
+async function loadPlayback(matchId) {
+  const ttl = heroes => (heroes ? TTL.match : TTL.retry);
+  return cached(`playback:${matchId}`, ttl, () => tryStratz(() => stratzPlayback(matchId)));
+}
+
 // ─── Драфт ──────────────────────────────────────────────────────────────
 
 const STRATZ_MATCHUP_QUERY = `query Matchup($id: Short!) {
@@ -1169,6 +1207,10 @@ async function handleApi(req, res, pathname, url) {
   if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/heroes\/(\d{1,3})\/itemPopularity$/))) {
     const items = await cached(`hero-items:${match[1]}`, TTL.match, () => odGet(`/heroes/${match[1]}/itemPopularity`));
     return sendJson(res, 200, items);
+  }
+
+  if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/playback\/(\d{6,12})$/))) {
+    return sendJson(res, 200, { heroes: await loadPlayback(match[1]) });
   }
 
   if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/pro\/(\d{1,3})$/))) {

@@ -155,9 +155,28 @@
     .stat-bar span { white-space: nowrap; }
     .pro-hero .good { color: #34D399; }
     .pro-hero .bad { color: #F87171; }
-    .death-map-box { display: grid; gap: .75rem 1rem; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); align-items: center; }
-    @media (max-width: 560px) { .death-map-box { grid-template-columns: minmax(0, 1fr); } }
-    .death-map { display: block; width: 100%; aspect-ratio: 1; border-radius: .6rem; }
+    .death-map-box { display: grid; gap: .75rem 1rem; grid-template-columns: minmax(0, 18rem) minmax(0, 1fr); align-items: center; }
+    .map-wrap { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+    @media (max-width: 768px) { .death-map-box, .map-wrap { grid-template-columns: minmax(0, 1fr); } }
+    .death-map { display: block; width: 100%; aspect-ratio: 1; border-radius: .7rem; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); }
+    .map-label { font-size: 2.4px; font-weight: 600; fill: #E2E8F0; fill-opacity: .8; }
+    .map-num { font-size: 2.1px; font-weight: 700; fill: #fff; pointer-events: none; }
+    .map-pin { cursor: pointer; }
+    .map-pin.active .map-ring { stroke: #fff; stroke-width: 1.3; }
+    .map-list { display: grid; gap: .35rem; max-height: 30rem; overflow-y: auto; padding-right: .2rem; }
+    .map-row { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr); gap: .5rem; width: 100%; padding: .5rem .6rem; border-radius: .55rem; text-align: left; background: rgba(0, 0, 0, .3); border: 1px solid rgba(255, 255, 255, .06); }
+    .map-row:hover, .map-row.active { border-color: #F0444F; }
+    .map-index { display: flex; align-items: center; justify-content: center; width: 1.3rem; height: 1.3rem; border-radius: 999px; font-size: .7rem; font-weight: 700; color: #fff; background: #2A2F48; }
+    .map-body { display: grid; gap: .1rem; min-width: 0; }
+    .map-top { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .4rem; font-size: .8rem; color: #CBD5E1; }
+    .map-top strong { color: #fff; }
+    .map-top small { color: #A3ACBB; }
+    .map-hero { display: inline-flex; align-items: center; gap: .25rem; color: #fff; }
+    .map-hero img { width: 1.6rem; height: .95rem; object-fit: cover; border-radius: .15rem; }
+    .map-where { font-size: .78rem; color: #FDE68A; }
+    .map-cost { font-size: .73rem; color: #A3ACBB; }
+    .map-why { font-size: .73rem; color: #FCA5A5; }
+    .pro-pill.plain { padding-left: .7rem; }
     .stat-awards { display: grid; gap: .4rem; margin-bottom: .75rem; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); }
     .stat-award { padding: .4rem .55rem; border-radius: .5rem; background: rgba(0, 0, 0, .35); }
     .stat-award > span { display: block; font-size: .7rem; color: #FDE68A; }
@@ -1204,7 +1223,7 @@
             <i data-lucide="skull" class="w-5 h-5 text-uc-red"></i>
             Разбор ошибок в матче
           </h3>
-          <div id="rp-death-map" class="hidden death-map-box"></div>
+          <div id="rp-death-map" class="hidden space-y-3 mb-3"></div>
           <div id="match-mistakes" class="space-y-2 mb-3"></div>
           <div id="death-timeline" class="space-y-3"></div>
         </div>
@@ -1585,6 +1604,7 @@
   <script src="draft.js"></script>
   <script src="analyst.js"></script>
   <script src="stats.js"></script>
+  <script src="map.js"></script>
   <script>refreshIcons();</script>
 </body>
 </html>
