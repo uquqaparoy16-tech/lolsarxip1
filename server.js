@@ -17,7 +17,7 @@ const ANONYMOUS_ID = 4294967295;
 const STEAM64_BASE = 76561197960265728n;
 const MATCH_LIMIT = 20;
 const PARALLEL_REQUESTS = 6; // сколько матчей загружаем одновременно
-const REQUEST_TIMEOUT_MS = 15000;
+const REQUEST_TIMEOUT_MS = 25000;
 const RATE_LIMIT_PER_MINUTE = Number(process.env.RATE_LIMIT_PER_MINUTE) || 60;
 const COACH_PER_MINUTE = 6;
 const STATIC_FILES = {
@@ -193,7 +193,7 @@ async function fetchJson(source, url, options = {}) {
     res = await fetch(url, { ...options, signal: controller.signal });
   } catch (e) {
     // В тексте ошибки нет адреса: в адресе Steam лежит ключ
-    throw new UpstreamError(source, 502, e.name === 'AbortError' ? 'нет ответа за 15 секунд' : 'нет соединения');
+    throw new UpstreamError(source, 502, e.name === 'AbortError' ? 'нет ответа за 25 секунд' : 'нет соединения');
   } finally {
     clearTimeout(timer);
   }

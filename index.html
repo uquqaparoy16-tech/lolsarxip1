@@ -206,6 +206,21 @@
     .case-enemy small { font-size: .7rem; color: #A3ACBB; }
     #replay-range { accent-color: #F0444F; }
     .replay-hero { transition: opacity .2s; }
+    .replay-range { position: relative; }
+    #replay-ticks { position: relative; height: .4rem; margin-top: -.1rem; pointer-events: none; }
+    #replay-ticks i { position: absolute; top: 0; width: 2px; height: .4rem; background: #F87171; }
+    .replay-focus { flex: 0 1 11rem; }
+    .replay-check { display: inline-flex; align-items: center; gap: .35rem; font-size: .8rem; color: #CBD5E1; }
+    .replay-steps { display: flex; flex-wrap: wrap; gap: .25rem; }
+    .replay-step { padding: .1rem .4rem; border-radius: .35rem; font-size: .72rem; font-weight: 600; color: #FCA5A5; background: rgba(240, 68, 79, .12); }
+    .replay-step.active, .replay-step:hover { color: #fff; background: #F0444F; }
+    .replay-moment { display: grid; gap: .3rem; padding: .7rem .8rem; border-radius: .65rem; font-size: .82rem; color: #CBD5E1; background: rgba(0, 0, 0, .4); border: 1px solid rgba(240, 68, 79, .4); }
+    .replay-moment-head span { display: block; font-size: .72rem; color: #A3ACBB; }
+    .replay-moment-head strong { color: #fff; }
+    .replay-moment h5 { margin-top: .2rem; font-size: .78rem; font-weight: 700; color: #FDE68A; }
+    .replay-moment ul { padding-left: 1rem; list-style: disc; }
+    .replay-moment p { font-size: .75rem; color: #A3ACBB; }
+    .replay-moment .pro-btn { justify-self: start; margin-top: .2rem; }
     .pro-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
     .pro-table th, .pro-table td { padding: .5rem .6rem; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, .06); }
     .pro-table thead th { color: #fff; font-weight: 600; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
