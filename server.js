@@ -41,7 +41,8 @@ const STATIC_FILES = {
   '/icon-512.png': 'icon-512.png',
   '/og.png': 'og.png',
   '/robots.txt': 'robots.txt',
-  '/yandex_c3704f6e31ce03ca.html': 'yandex_c3704f6e31ce03ca.html'
+  '/yandex_c3704f6e31ce03ca.html': 'yandex_c3704f6e31ce03ca.html',
+  '/google0b2e23d70af5f039.html': 'google0b2e23d70af5f039.html'
 };
 const MIME = {
   '.html': 'text/html; charset=utf-8',
