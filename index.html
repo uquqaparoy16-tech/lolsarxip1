@@ -130,6 +130,30 @@
     .pro-analysis li.bad::before { background: #F87171; }
     .pro-verdict { padding-top: .75rem; border-top: 1px solid rgba(255, 255, 255, .06); font-size: .875rem; line-height: 1.5; color: #fff; }
     .pro-verdict p + p { margin-top: .25rem; color: #FCA5A5; }
+    .stat-tiles { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); }
+    .stat-tile { padding: .6rem .75rem; border-radius: .6rem; background: rgba(0, 0, 0, .35); }
+    .stat-tile strong { display: block; font-size: 1.15rem; color: #fff; }
+    .stat-tile span { font-size: .75rem; color: #A3ACBB; }
+    .stat-tiles.small strong { font-size: .95rem; }
+    .stat-columns { display: grid; gap: 1.25rem 1.5rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); }
+    #overview-result h4, #hero-detail-body h4 { margin-bottom: .4rem; font-size: .85rem; font-weight: 600; color: #fff; }
+    .stat-table { width: 100%; border-collapse: collapse; font-size: .8rem; color: #CBD5E1; }
+    .stat-table th, .stat-table td { padding: .35rem .5rem; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, .06); white-space: nowrap; }
+    .stat-table th { font-weight: 600; color: #A3ACBB; }
+    .stat-table th button { font-weight: 600; color: #A3ACBB; text-decoration: underline; text-underline-offset: 3px; }
+    .stat-table tr.me td { background: rgba(240, 68, 79, .1); }
+    .stat-table.clickable tbody tr { cursor: pointer; }
+    .stat-table.clickable tbody tr:hover td { background: rgba(255, 255, 255, .04); }
+    .stat-hero { display: inline-flex; align-items: center; gap: .4rem; color: #fff; }
+    .stat-hero img { width: 2rem; height: 1.15rem; object-fit: cover; border-radius: .2rem; }
+    .stat-items { display: inline-flex; gap: .15rem; }
+    .stat-items img { width: 1.7rem; height: 1.25rem; object-fit: cover; border-radius: .15rem; }
+    .stat-bars { display: grid; gap: .3rem; grid-template-columns: repeat(11, minmax(1.7rem, 1fr)); overflow-x: auto; }
+    .stat-bar { position: relative; display: grid; grid-template-rows: 4.5rem auto auto; justify-items: center; font-size: .7rem; color: #A3ACBB; }
+    .stat-bar i { align-self: end; display: block; width: 100%; min-height: 2px; border-radius: .2rem .2rem 0 0; background: #F0444F; }
+    .stat-bar span { white-space: nowrap; }
+    .pro-hero .good { color: #34D399; }
+    .pro-hero .bad { color: #F87171; }
     .pro-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
     .pro-table th, .pro-table td { padding: .5rem .6rem; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, .06); }
     .pro-table thead th { color: #fff; font-weight: 600; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -396,6 +420,9 @@
         </button>
         <button id="tab-btn-draft" onclick="switchTab('draft')" class="tab-inactive px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors">
           Драфт
+        </button>
+        <button id="tab-btn-heroes" onclick="switchTab('heroes')" class="tab-inactive px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors">
+          Герои
         </button>
         <button id="tab-btn-plan" onclick="switchTab('plan')" class="tab-inactive px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors">
           Апнуться
@@ -674,6 +701,17 @@
           <div id="habits-result" class="space-y-3" aria-live="polite"></div>
         </div>
 
+        <div id="overview-card" class="glass rounded-2xl p-5 sm:p-6 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+              <h3 class="font-outfit font-bold text-lg text-white">Статистика за всё время</h3>
+              <p class="text-sm text-slate-400">Матчи, герои, линии, друзья, рекорды и активность.</p>
+            </div>
+            <button id="overview-btn" type="button" class="pro-btn" onclick="statsLoadOverview()">Показать статистику</button>
+          </div>
+          <div id="overview-result" class="space-y-4"></div>
+        </div>
+
         <div id="bench-card" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-4">
           <div>
             <h3 class="font-outfit font-bold text-lg text-white">Твой уровень на героях</h3>
@@ -943,6 +981,16 @@
             </div>
           </div>
           <div id="rp-coach-body" class="pro-coach" aria-live="polite"></div>
+        </div>
+
+        <div id="rp-board" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-4">
+          <h3 class="font-outfit font-bold text-lg text-white">Таблица матча</h3>
+          <div id="rp-board-body"></div>
+          <div id="rp-lead-box" class="hidden space-y-2">
+            <h4 class="text-sm font-semibold text-white">Перевес по нетворсу</h4>
+            <p class="text-xs text-slate-400">Выше нуля ведут Силы Света, ниже нуля Силы Тьмы.</p>
+            <div style="height:180px"><canvas id="rp-lead-chart"></canvas></div>
+          </div>
         </div>
 
         <div id="rp-analyst" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-4">
@@ -1261,6 +1309,28 @@
       </div>
     </section>
 
+    <section id="sec-heroes" class="hidden space-y-6 anim-fade-up">
+      <div>
+        <h2 class="font-outfit font-bold text-2xl text-white">Герои: винрейт и контрпики</h2>
+        <p class="text-sm text-slate-400 mt-1">Нажми на героя, чтобы увидеть контрпики, союзников и предметы. Нажми на название колонки, чтобы отсортировать.</p>
+      </div>
+      <div id="hero-detail" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-4 border-uc-red/25">
+        <h3 id="hero-detail-title" class="font-outfit font-bold text-lg text-white"></h3>
+        <div id="hero-detail-body" class="space-y-4"></div>
+      </div>
+      <div class="glass rounded-2xl p-5 sm:p-6 space-y-3">
+        <div class="flex flex-wrap gap-2">
+          <input type="text" class="pro-input" placeholder="Поиск героя на английском" aria-label="Поиск героя" oninput="statsSearchHeroes(this.value)">
+          <select class="pro-input" aria-label="Ранг" onchange="statsSetBracket(this.value)">
+            <option value="0">Все ранги</option>
+            <option value="1">Рекрут</option><option value="2">Страж</option><option value="3">Рыцарь</option><option value="4">Герой</option>
+            <option value="5">Легенда</option><option value="6">Властелин</option><option value="7">Божество</option><option value="8">Титан</option>
+          </select>
+        </div>
+        <div id="heroes-table" class="overflow-x-auto"></div>
+      </div>
+    </section>
+
     <section id="sec-plan" class="hidden space-y-6 max-w-5xl mx-auto anim-fade-up">
       <div class="glass rounded-2xl p-6 sm:p-10 space-y-8">
         <div class="text-center space-y-3">
@@ -1493,6 +1563,7 @@
   <script src="pro.js"></script>
   <script src="draft.js"></script>
   <script src="analyst.js"></script>
+  <script src="stats.js"></script>
   <script>refreshIcons();</script>
 </body>
 </html>

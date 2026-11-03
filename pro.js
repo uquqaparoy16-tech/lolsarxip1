@@ -884,6 +884,7 @@ function proOnDashboard(profile, matches, skill, audit) {
   document.getElementById('habits-card').classList.toggle('hidden', !matches.some(m => m.imp != null));
 
   saveRecentPlayer(profile);
+  if (typeof statsResetOverview === 'function') statsResetOverview();
   if (SERVER_MODE && currentAccountId && proState.summary) {
     fetch(`/api/visit/${currentAccountId}?pts=${proState.summary.skill.trueMMR}`, { method: 'POST', keepalive: true }).catch(() => {});
   }
@@ -917,6 +918,7 @@ function proOnResults() {
 function proOnReplay(m) {
   renderCoach(m);
   if (typeof renderAnalyst === 'function') renderAnalyst(m);
+  if (typeof renderBoard === 'function') renderBoard(m);
   renderReplayBench(m);
 }
 

@@ -289,7 +289,11 @@ async function renderDraftBuild() {
     return;
   }
 
-  box.innerHTML = DRAFT_STAGES.map(([key, label]) => {
+  box.innerHTML = draftStagesHtml(data) || '<p class="text-sm text-slate-400">Для этого героя мало данных.</p>';
+}
+
+function draftStagesHtml(data) {
+  return DRAFT_STAGES.map(([key, label]) => {
     const skipConsumables = key === 'mid_game_items' || key === 'late_game_items';
     const items = Object.entries(data[key] || {})
       .map(([id, count]) => ({ key: itemNames[id], count }))
@@ -308,7 +312,7 @@ async function renderDraftBuild() {
             </span>`).join('')}
         </div>
       </div>`;
-  }).join('') || '<p class="text-sm text-slate-400">Для этого героя мало данных.</p>';
+  }).join('');
 }
 
 function renderDraft(refreshPicks = true) {

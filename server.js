@@ -27,6 +27,7 @@ const STATIC_FILES = {
   '/pro.js': 'pro.js',
   '/draft.js': 'draft.js',
   '/analyst.js': 'analyst.js',
+  '/stats.js': 'stats.js',
   '/styles.css': 'styles.css',
   '/sw.js': 'sw.js',
   '/manifest.webmanifest': 'manifest.webmanifest',
@@ -192,7 +193,12 @@ async function fetchJson(source, url, options = {}) {
   } finally {
     clearTimeout(timer);
   }
-  if (!res.ok) throw new UpstreamError(source, res.status, `код ${res.status}`);
+  if (!res.ok) {
+    // Защита сайта отвечает страницей, а не JSON: так отличаем блокировку адреса от плохого токена
+    const text = res.status === 403 ? await res.text().catch(() => '') : '';
+    const blocked = /cloudflare|just a moment|attention required/i.test(text) ? ', защита сайта' : '';
+    throw new UpstreamError(source, res.status, `код ${res.status}${blocked}`);
+  }
   try {
     return await res.json();
   } catch (e) {
@@ -338,7 +344,7 @@ async function stratzRequest(query, variables) {
       return await fetchJson('stratz', config.stratz, options);
     }
   } catch (e) {
-    if (e.status === 429) stratzPausedUntil = Date.now() + STRATZ_PAUSE_MS;
+    if (e.status === 429 || e.status === 403) stratzPausedUntil = Date.now() + STRATZ_PAUSE_MS;
     throw e;
   } finally {
     releaseStratzSlot();
@@ -859,6 +865,52 @@ async function coachAdvice(matchId, heroId, ip) {
   }
 }
 
+// ─── Статистика за всё время ────────────────────────────────────────────
+
+const OVERVIEW_TTL = 60 * 60 * 1000;
+const RECORD_FIELDS = ['kills', 'assists', 'gold_per_min', 'xp_per_min', 'hero_damage', 'tower_damage', 'last_hits'];
+
+async function loadRecord(accountId, field) {
+  const list = await odGet(`/players/${accountId}/matches?limit=1&sort=${field}&project=${field}&project=hero_id`);
+  return Array.isArray(list) && list[0] ? list[0] : null;
+}
+
+async function loadOverview(accountId) {
+  return cached(`overview:${accountId}`, OVERVIEW_TTL, async () => {
+    const part = async load => {
+      try {
+        return await load();
+      } catch (e) {
+        noteError('opendota', e.message);
+        return null;
+      }
+    };
+    const base = `/players/${accountId}`;
+    const [wl, heroes, peers, totals, counts, activity] = await Promise.all([
+      part(() => odGet(`${base}/wl`)),
+      part(() => odGet(`${base}/heroes`)),
+      part(() => odGet(`${base}/peers`)),
+      part(() => odGet(`${base}/totals`)),
+      part(() => odGet(`${base}/counts`)),
+      part(() => odGet(`${base}/matches?date=365&project=start_time`))
+    ]);
+    const found = await Promise.all(RECORD_FIELDS.map(field => part(() => loadRecord(accountId, field))));
+    const records = {};
+    RECORD_FIELDS.forEach((field, index) => {
+      if (found[index]) records[field] = found[index];
+    });
+    return {
+      wl,
+      heroes: Array.isArray(heroes) ? heroes.slice(0, 20) : [],
+      peers: Array.isArray(peers) ? peers.slice(0, 20).map(p => ({ account_id: p.account_id, personaname: p.personaname, with_games: p.with_games, with_win: p.with_win })) : [],
+      totals,
+      counts: counts ? { leaver_status: counts.leaver_status, lane_role: counts.lane_role, is_radiant: counts.is_radiant } : null,
+      activity: Array.isArray(activity) ? activity.map(m => ({ start_time: m.start_time, player_slot: m.player_slot, radiant_win: m.radiant_win })) : [],
+      records
+    };
+  });
+}
+
 // ─── Драфт ──────────────────────────────────────────────────────────────
 
 const STRATZ_MATCHUP_QUERY = `query Matchup($id: Short!) {
@@ -1059,6 +1111,10 @@ async function handleApi(req, res, pathname, url) {
   if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/players\/(\d{1,10})$/))) {
     const { profile } = await loadPlayer(match[1]);
     return sendJson(res, 200, profile);
+  }
+
+  if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/players\/(\d{1,10})\/overview$/))) {
+    return sendJson(res, 200, await loadOverview(match[1]));
   }
 
   if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/players\/(\d{1,10})\/recentMatches$/))) {
