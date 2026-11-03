@@ -40,7 +40,8 @@ const STATIC_FILES = {
   '/icon-192.png': 'icon-192.png',
   '/icon-512.png': 'icon-512.png',
   '/og.png': 'og.png',
-  '/robots.txt': 'robots.txt'
+  '/robots.txt': 'robots.txt',
+  '/yandex_c3704f6e31ce03ca.html': 'yandex_c3704f6e31ce03ca.html'
 };
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -1029,14 +1030,136 @@ async function stratzWards(matchId) {
   return Array.isArray(events) ? events : null;
 }
 
+const STRATZ_EVENTS_QUERY = `query Events($id: Long!) {
+  match(id: $id) {
+    playbackData {
+      buildingEvents { time indexId type hp positionX positionY isRadiant }
+      roshanEvents { time hp x y }
+      runeEvents { indexId time positionX positionY rune }
+      courierEvents { id isRadiant events { time positionX positionY hp } }
+    }
+  }
+}`;
+
+// Первое событие здания несёт тип и место, остальные только здоровье
+function buildingList(events) {
+  const buildings = new Map();
+  (events || []).forEach(event => {
+    if (event.type && !buildings.has(event.indexId)) {
+      buildings.set(event.indexId, { type: event.type, radiant: event.isRadiant, x: event.positionX, y: event.positionY, died: null });
+    }
+    const building = buildings.get(event.indexId);
+    if (building && event.hp === 0 && building.died === null) building.died = event.time;
+  });
+  return [...buildings.values()];
+}
+
+function roshanStory(events) {
+  const spots = [];
+  const deaths = [];
+  (events || []).forEach(event => {
+    if (event.x != null && event.y != null) spots.push([event.time, event.x, event.y]);
+    const last = deaths[deaths.length - 1];
+    if (event.hp === 0 && (!last || last[1] !== null)) deaths.push([event.time, null]);
+    else if (event.hp > 0 && last && last[1] === null) last[1] = event.time;
+  });
+  return { spots, deaths };
+}
+
+function runeList(events) {
+  const runes = new Map();
+  (events || []).forEach(event => {
+    const rune = runes.get(event.indexId);
+    if (rune) rune.end = event.time;
+    else if (event.positionX != null) runes.set(event.indexId, { time: event.time, end: event.time, x: event.positionX, y: event.positionY, rune: event.rune });
+  });
+  return [...runes.values()];
+}
+
+function courierList(list) {
+  return (list || []).map(courier => ({
+    radiant: courier.isRadiant,
+    points: thinPositions((courier.events || [])
+      .filter(event => event.hp !== 0 && event.positionX != null)
+      .map(event => ({ time: event.time, x: event.positionX, y: event.positionY })))
+  })).filter(courier => courier.points.length > 0);
+}
+
+async function stratzEvents(matchId) {
+  const data = await stratzQuery(STRATZ_EVENTS_QUERY, { id: Number(matchId) });
+  const play = data && data.match && data.match.playbackData;
+  if (!play) return null;
+  return {
+    buildings: buildingList(play.buildingEvents),
+    roshan: roshanStory(play.roshanEvents),
+    runes: runeList(play.runeEvents),
+    couriers: courierList(play.courierEvents)
+  };
+}
+
+const INVENTORY_SLOTS = ['item0', 'item1', 'item2', 'item3', 'item4', 'item5'];
+const USED_ITEM_WINDOW_SECONDS = 120;
+const STRATZ_SURVIVAL_QUERY = `query Survival($id: Long!) {
+  match(id: $id) {
+    players {
+      heroId
+      stats { deathEvents { time } }
+      playbackData {
+        playerUpdateHealthEvents { time hp maxHp }
+        inventoryEvents { time ${INVENTORY_SLOTS.map(slot => `${slot} { itemId charges }`).join(' ')} }
+        itemUsedEvents { time itemId }
+      }
+    }
+  }
+}`;
+
+function thinHealth(events) {
+  const points = [];
+  let next = -Infinity;
+  (events || []).forEach(event => {
+    if (event.time < next || !event.maxHp) return;
+    points.push([event.time, Math.round((event.hp / event.maxHp) * 100)]);
+    next = event.time + PLAYBACK_STEP_SECONDS;
+  });
+  return points;
+}
+
+// Предметы нужны только на момент смерти: остальной инвентарь весит много и не используется
+function deathLoadout(time, inventories, used) {
+  const before = (inventories || []).filter(event => event.time <= time);
+  const last = before[before.length - 1];
+  return {
+    time,
+    items: last ? INVENTORY_SLOTS.map(slot => last[slot]).filter(item => item && item.itemId).map(item => [item.itemId, item.charges ?? null]) : [],
+    used: (used || []).filter(event => event.time <= time && event.time > time - USED_ITEM_WINDOW_SECONDS).map(event => [event.itemId, event.time])
+  };
+}
+
+async function stratzSurvival(matchId) {
+  const data = await stratzQuery(STRATZ_SURVIVAL_QUERY, { id: Number(matchId) });
+  const players = data && data.match && data.match.players;
+  if (!Array.isArray(players)) return null;
+  const health = {};
+  const loadouts = {};
+  players.forEach(player => {
+    const play = player.playbackData || {};
+    const deaths = (player.stats && player.stats.deathEvents) || [];
+    health[player.heroId] = thinHealth(play.playerUpdateHealthEvents);
+    loadouts[player.heroId] = deaths.map(death => deathLoadout(death.time, play.inventoryEvents, play.itemUsedEvents));
+  });
+  return { health, loadouts };
+}
+
 async function loadPlayback(matchId) {
   const ttl = result => (result.heroes ? TTL.match : TTL.retry);
   return cached(`playback:${matchId}`, ttl, async () => {
-    const [heroes, wards] = await Promise.all([
+    const [heroes, wards, events, survival] = await Promise.all([
       tryStratz(() => stratzPlayback(matchId)),
-      tryStratz(() => stratzWards(matchId))
+      tryStratz(() => stratzWards(matchId)),
+      tryStratz(() => stratzEvents(matchId)),
+      tryStratz(() => stratzSurvival(matchId))
     ]);
-    return { heroes, wards };
+    return { heroes, wards, ...events, ...survival };
   });
 }
 
@@ -1416,28 +1539,6 @@ async function handleApi(req, res, pathname, url) {
 
   if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/players\/(\d{1,10})\/overview$/))) {
     return sendJson(res, 200, await loadOverview(match[1]));
-  }
-
-  if (req.method === 'GET' && pathname === '/api/od/schemaProbe') {
-    const sample = String(url.searchParams.get('sample') || '');
-    if (/^\d{6,12}$/.test(sample)) {
-      const data = await stratzQuery(`query S($id: Long!) { match(id: $id) { playbackData {
-        buildingEvents { time indexId type hp maxHp positionX positionY isRadiant npcId }
-        towerDeathEvents { time radiant dire }
-        roshanEvents { time hp maxHp x y createTime }
-        runeEvents { indexId time positionX positionY location rune action }
-      } } }`, { id: Number(sample) });
-      const play = data && data.match && data.match.playbackData;
-      if (!play) return sendJson(res, 200, { empty: true });
-      const brief = list => ({ count: (list || []).length, head: (list || []).slice(0, 4), tail: (list || []).slice(-3) });
-      const types = {};
-      (play.buildingEvents || []).forEach(e => { types[e.type] = (types[e.type] || 0) + 1; });
-      return sendJson(res, 200, { types, buildings: brief(play.buildingEvents), deaths: brief((play.buildingEvents || []).filter(e => e.hp === 0)), towers: brief(play.towerDeathEvents), roshan: brief(play.roshanEvents), runes: brief(play.runeEvents) });
-    }
-    const name = String(url.searchParams.get('type') || '');
-    if (!/^[A-Z][A-Za-z]{1,60}$/.test(name)) return sendJson(res, 400, { error: 'Некорректный запрос' });
-    const data = await stratzQuery(`{ __type(name: "${name}") { fields { name type { name kind ofType { name kind ofType { name kind ofType { name } } } } } } }`, {});
-    return sendJson(res, 200, data);
   }
 
   if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/players\/(\d{1,10})\/heroMatches$/))) {
