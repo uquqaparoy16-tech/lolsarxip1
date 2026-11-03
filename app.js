@@ -68,6 +68,39 @@ function calculateMatchPerformanceGrade(m, isWin, profileTier, playerTrueMMR) {
   };
 }
 
+// На сколько ПТС один пункт IMP сдвигает оценку матча: +30 IMP это примерно один ранг вверх
+const IMP_POINTS = 25;
+
+// Точка отсчёта та же, что в профиле: оценка игрока. Так ранги матчей не спорят с его ПТС.
+function matchBaseMMR(m) {
+  if (currentPlayerTrueMMR) return currentPlayerTrueMMR;
+  if (m.average_rank) return rankTierToMMR(m.average_rank);
+  return currentProfileTier ? rankTierToMMR(currentProfileTier) : 1500;
+}
+
+// На какой ранг сыгран матч: уровень игрока плюс его вклад в этот матч (IMP).
+// Без IMP считаем по итоговым цифрам, а Турбо по таким цифрам не сравнить.
+function matchRank(m) {
+  const base = matchBaseMMR(m);
+  let mmr;
+  if (m.imp != null) {
+    mmr = base + m.imp * IMP_POINTS;
+  } else if (isTurbo(m) || !m.gold_per_min) {
+    return null;
+  } else {
+    mmr = calculateMatchPerformanceGrade(m, wonMatch(m), currentProfileTier, currentPlayerTrueMMR).matchMMR;
+  }
+  mmr = Math.max(50, Math.round(mmr));
+  const tier = mmrToRankTier(mmr);
+  const baseTier = mmrToRankTier(base);
+  return {
+    mmr,
+    tier,
+    title: getRankTitle(tier).replace(/ \(.*\)$/, ''),
+    tone: tier > baseTier ? 'up' : tier < baseTier ? 'down' : 'same'
+  };
+}
+
 /**
  * Dota 2 True Skill Engine 3.0 (UC.ZONE Cyber Edition)
  * Deep Statistical Calibration • Role-Aware MMR Inspector • Replay AI Coach
@@ -1539,9 +1572,9 @@ function renderMatchesTable(matches) {
     const icon = getHeroIcon(m.hero_id);
     const name = getHeroName(m.hero_id);
 
-    const matchGPM = m.gold_per_min || 0;
-    const matchDeaths = m.deaths || 0;
-    const matchTier = m.imp != null ? `Оценка ${gradeFromImp(m.imp)}` : isTurbo(m) ? 'Турбо' : !matchGPM ? '—' : matchGPM >= 650 && matchDeaths <= 5 ? 'Герой 1' : matchGPM >= 520 ? 'Рыцарь 2' : matchDeaths >= 9 ? 'Рекрут 3' : 'Страж 4';
+    const rank = matchRank(m);
+    const matchTier = rank ? rank.title : isTurbo(m) ? 'Турбо' : '—';
+    const rankColor = !rank ? 'text-slate-400' : rank.tone === 'up' ? 'text-emerald-400' : rank.tone === 'down' ? 'text-rose-400' : 'text-amber-300';
 
     return `
       <tr class="hover:bg-slate-800/30 transition-colors">
@@ -1561,7 +1594,7 @@ function renderMatchesTable(matches) {
         </td>
         <td class="px-3 py-2.5 font-mono text-uc-red font-semibold">${formatStat(m.gold_per_min)}</td>
         <td class="px-3 py-2.5 font-mono text-slate-300">${formatStat(m.tower_damage)}</td>
-        <td class="px-3 py-2.5 font-mono text-[13px] text-amber-300 font-semibold">${matchTier}</td>
+        <td class="px-3 py-2.5 font-mono text-[13px] ${rankColor} font-semibold whitespace-nowrap">${matchTier}</td>
         <td class="px-3 py-2.5 text-center">
           <button onclick="inspectMatchIndex(${idx})" class="px-3 py-1 bg-uc-red/15 hover:bg-uc-red text-uc-red hover:text-white border border-uc-red/30 rounded-lg text-[13px] font-bold font-mono transition-colors">
             РАЗБОР
@@ -1864,7 +1897,8 @@ function applyMatchGrade(m) {
   const live = getLiveMatchData(m);
   const detail = live ? playerDetail(live.match, live.player) : null;
   if (!detail || detail.imp == null) return;
-  document.getElementById('rp-grade').textContent = `Оценка ${gradeFromImp(detail.imp)}`;
+  const rank = matchRank({ ...m, imp: detail.imp });
+  document.getElementById('rp-grade').textContent = `${rank.title} (~${rank.mmr} ПТС)`;
   document.getElementById('rp-grade-sub').textContent = `Вклад в матч (IMP): ${detail.imp > 0 ? '+' : ''}${detail.imp}`;
 }
 
@@ -1903,7 +1937,8 @@ function renderReplayView(m) {
   document.getElementById('rp-td').textContent = formatStat(m.tower_damage);
 
   const evalResult = calculateMatchPerformanceGrade(m, isWin, currentProfileTier, currentPlayerTrueMMR);
-  document.getElementById('rp-grade').textContent = isTurbo(m) ? 'Турбо' : evalResult.grade;
+  const rank = matchRank(m);
+  document.getElementById('rp-grade').textContent = rank ? `${rank.title} (~${rank.mmr} ПТС)` : 'Турбо';
   document.getElementById('rp-grade-sub').textContent = isTurbo(m)
     ? 'В Турбо GPM намного выше обычного, поэтому шкала рангов здесь не применяется'
     : evalResult.sub;
@@ -2701,15 +2736,9 @@ function renderActiveProModule(num, m) {
   container.innerHTML = renderProModuleLive(num, m);
 }
 
-const IMP_GRADES = [[30, 'S'], [15, 'A'], [0, 'B'], [-15, 'C']];
 const LANE_NAMES = { SAFE_LANE: 'лёгкой линии', MID_LANE: 'центре', OFF_LANE: 'сложной линии' };
 const AWARD_NAMES = { MVP: 'MVP матча', TOP_CORE: 'лучший кор', TOP_SUPPORT: 'лучший саппорт' };
 let itemNames = null;
-
-function gradeFromImp(imp) {
-  const found = IMP_GRADES.find(([limit]) => imp >= limit);
-  return found ? found[1] : 'D';
-}
 
 function playerDetail(match, player) {
   return match.details && match.details.players ? match.details.players[player.hero_id] || null : null;

@@ -13,7 +13,6 @@ const PRO_BENCH_METRICS = [
 ];
 const PRO_NEXT_STEPS = [0.5, 0.7, 0.9, 0.95, 0.99];
 const PRO_BRACKETS = { 1: 'Рекрут', 2: 'Страж', 3: 'Рыцарь', 4: 'Герой', 5: 'Легенда', 6: 'Властелин', 7: 'Божество', 8: 'Титан' };
-const PRO_GRADE_ORDER = ['S', 'A', 'B', 'C', 'D'];
 const PRO_RECENT_KEY = 'dota-recent-players';
 const PRO_RECENT_MAX = 6;
 const PRO_GOAL_TEXT = {
@@ -330,26 +329,19 @@ function renderGradeStrip(matches) {
   const box = document.getElementById('grade-strip');
   if (!box) return;
   const rows = matches
-    .map((m, index) => ({ m, index }))
-    .filter(row => row.m.imp != null)
+    .map((m, index) => ({ m, index, rank: matchRank(m) }))
+    .filter(row => row.rank)
     .reverse();
   box.classList.toggle('hidden', rows.length < 3);
   if (rows.length < 3) return;
 
-  const counts = {};
-  rows.forEach(row => {
-    const grade = gradeFromImp(row.m.imp);
-    counts[grade] = (counts[grade] || 0) + 1;
-  });
-  const summary = PRO_GRADE_ORDER.filter(g => counts[g]).map(g => `${g}: ${counts[g]}`).join(' · ');
+  const count = tone => rows.filter(row => row.rank.tone === tone).length;
+  const mean = getRankTitle(mmrToRankTier(average(rows.map(row => row.rank.mmr)))).replace(/ \(.*\)$/, '');
   box.innerHTML = `
     <div class="pro-grades">
-      ${rows.map(({ m, index }) => {
-        const grade = gradeFromImp(m.imp);
-        return `<button type="button" class="pro-grade g-${grade}" title="${esc(getHeroName(m.hero_id))}: ${wonMatch(m) ? 'победа' : 'поражение'}" aria-label="Разбор матча на ${esc(getHeroName(m.hero_id))}, оценка ${grade}" onclick="inspectMatchIndex(${index})">${grade}</button>`;
-      }).join('')}
+      ${rows.map(({ m, index, rank }) => `<button type="button" class="pro-grade ${rank.tone}" title="${esc(getHeroName(m.hero_id))}: ${wonMatch(m) ? 'победа' : 'поражение'}" aria-label="Разбор матча на ${esc(getHeroName(m.hero_id))}, сыграно на ${esc(rank.title)}" onclick="inspectMatchIndex(${index})">${esc(rank.title)}</button>`).join('')}
     </div>
-    <p class="text-xs text-slate-400">${esc(summary)}. Нажми на оценку, чтобы открыть разбор матча.</p>`;
+    <p class="text-xs text-slate-400">В среднем ты играл на ранг ${esc(mean)}. Выше своего уровня: ${count('up')}, наравне: ${count('same')}, ниже: ${count('down')}. Нажми на ранг, чтобы открыть разбор матча.</p>`;
 }
 
 // ─── Цель с проверкой ───────────────────────────────────────────────────
@@ -561,7 +553,8 @@ function coachRuleText(match, viewer) {
   const { mistakes, good } = buildMatchMistakes(match, viewer);
   const won = (viewer.player_slot < 128) === !!match.radiant_win;
   const detail = playerDetail(match, viewer);
-  const grade = detail && detail.imp != null ? ` Оценка ${gradeFromImp(detail.imp)}.` : '';
+  const rank = detail && detail.imp != null ? matchRank({ ...viewer, imp: detail.imp }) : null;
+  const grade = rank ? ` Сыграл на ранг ${rank.title}.` : '';
   const top = good[0] || mistakes[1] || `Твой счёт: ${viewer.kills || 0}/${viewer.deaths || 0}/${viewer.assists || 0}.`;
   return [
     { label: 'Главное', text: `${won ? 'Победа' : 'Поражение'}.${grade} ${top}`.trim() },
@@ -923,6 +916,7 @@ function proOnResults() {
 
 function proOnReplay(m) {
   renderCoach(m);
+  if (typeof renderAnalyst === 'function') renderAnalyst(m);
   renderReplayBench(m);
 }
 

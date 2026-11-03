@@ -62,13 +62,11 @@
     .pro-hero span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .pro-hero strong { font-size: .8rem; font-weight: 600; color: #fff; white-space: nowrap; }
     .pro-grades { display: flex; flex-wrap: wrap; gap: .3rem; }
-    .pro-grade { width: 1.9rem; height: 1.9rem; border-radius: .4rem; font-size: .8rem; font-weight: 700; color: #06070A; transition: transform .15s; }
+    .pro-grade { padding: .25rem .5rem; border-radius: .4rem; font-size: .75rem; font-weight: 700; color: #06070A; white-space: nowrap; transition: transform .15s; }
     .pro-grade:hover { transform: translateY(-2px); }
-    .pro-grade.g-S { background: #34D399; }
-    .pro-grade.g-A { background: #86EFAC; }
-    .pro-grade.g-B { background: #FDE68A; }
-    .pro-grade.g-C { background: #FDBA74; }
-    .pro-grade.g-D { background: #F87171; }
+    .pro-grade.up { background: #34D399; }
+    .pro-grade.same { background: #FDE68A; }
+    .pro-grade.down { background: #F87171; }
     .pro-dots { display: flex; flex-wrap: wrap; gap: .3rem; }
     .pro-dots span { width: .8rem; height: .8rem; border-radius: 999px; }
     .pro-dots .good { background: #34D399; }
@@ -123,6 +121,15 @@
     .draft-items { display: flex; flex-wrap: wrap; gap: .35rem; }
     .draft-item { display: inline-flex; align-items: center; gap: .35rem; padding: .2rem .5rem .2rem .25rem; border-radius: .4rem; font-size: .75rem; color: #CBD5E1; background: rgba(0, 0, 0, .3); }
     .draft-item img { width: 1.6rem; height: 1.2rem; object-fit: cover; border-radius: .2rem; }
+    .pro-analysis { display: grid; gap: 1rem 1.5rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); }
+    .pro-analysis h4 { margin-bottom: .35rem; font-size: .875rem; font-weight: 600; color: #fff; }
+    .pro-analysis ul { display: grid; gap: .25rem; }
+    .pro-analysis li { padding-left: .8rem; position: relative; font-size: .82rem; line-height: 1.45; color: #CBD5E1; }
+    .pro-analysis li::before { content: ''; position: absolute; left: 0; top: .5em; width: .35rem; height: .35rem; border-radius: 999px; background: #64748B; }
+    .pro-analysis li.good::before { background: #34D399; }
+    .pro-analysis li.bad::before { background: #F87171; }
+    .pro-verdict { padding-top: .75rem; border-top: 1px solid rgba(255, 255, 255, .06); font-size: .875rem; line-height: 1.5; color: #fff; }
+    .pro-verdict p + p { margin-top: .25rem; color: #FCA5A5; }
     .pro-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
     .pro-table th, .pro-table td { padding: .5rem .6rem; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, .06); }
     .pro-table thead th { color: #fff; font-weight: 600; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -762,7 +769,7 @@
                   <th class="px-3 py-2.5">K / D / A</th>
                   <th class="px-3 py-2.5">GPM</th>
                   <th class="px-3 py-2.5">Урон вышкам</th>
-                  <th class="px-3 py-2.5">Уровень</th>
+                  <th class="px-3 py-2.5">Сыграл на</th>
                   <th class="px-3 py-2.5 text-center">Разбор</th>
                 </tr>
               </thead>
@@ -917,7 +924,7 @@
             </div>
 
             <div class="rp-score">
-              <div class="text-xs text-slate-400 font-mono">Оценка матча</div>
+              <div class="text-xs text-slate-400 font-mono">Сыграл на ранг</div>
               <div id="rp-grade" class="text-2xl font-outfit font-black text-white glow-text mt-1">—</div>
               <div id="rp-grade-sub" class="text-[13px] text-slate-400 font-mono">—</div>
             </div>
@@ -936,6 +943,14 @@
             </div>
           </div>
           <div id="rp-coach-body" class="pro-coach" aria-live="polite"></div>
+        </div>
+
+        <div id="rp-analyst" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-4">
+          <div>
+            <h3 class="font-outfit font-bold text-lg text-white">Разбор аналитика</h3>
+            <p class="text-xs text-slate-400">Драфт, фарм, бои, сборки и объекты по цифрам матча.</p>
+          </div>
+          <div id="rp-analyst-body" class="space-y-4" aria-live="polite"></div>
         </div>
 
         <!-- ═══════ KEY VERDICT BANNER (ПОЧЕМУ ПРОИГРАЛИ / ВЫИГРАЛИ) ═══════ -->
@@ -1477,6 +1492,7 @@
   <script src="app.js"></script>
   <script src="pro.js"></script>
   <script src="draft.js"></script>
+  <script src="analyst.js"></script>
   <script>refreshIcons();</script>
 </body>
 </html>
