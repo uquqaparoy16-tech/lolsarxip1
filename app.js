@@ -526,7 +526,7 @@ function renderPlayerHeader(profile, matchCount) {
 }
 
 function hideScanStates() {
-  ['error-state', 'loading-state', 'no-history-state', 'results'].forEach(id => {
+  ['error-state', 'loading-state', 'no-history-state', 'search-state', 'results'].forEach(id => {
     document.getElementById(id).classList.add('hidden');
   });
 }
@@ -551,7 +551,10 @@ async function resolveAccountId(raw) {
   if (direct) return direct;
 
   const vanity = String(raw).match(/steamcommunity\.com\/id\/([\w-]{2,32})/i);
-  if (!vanity) return null;
+  if (!vanity) {
+    if (/https?:|\.com/i.test(raw) || String(raw).trim().length < 2) return null;
+    return { search: String(raw).trim() };
+  }
   if (!SERVER_MODE) throw new ApiError('Ссылка с ником работает только через сервер. Вставь числовой ID из профиля Доты.');
 
   let res;
@@ -638,7 +641,11 @@ async function analyzePlayer() {
     const accountId = await resolveAccountId(raw);
     if (token !== scanToken) return;
     if (!accountId) {
-      throw new ApiError('Не удалось распознать ID. Подойдут: число из профиля Доты, Steam ID из 17 цифр или ссылка на профиль Steam.');
+      throw new ApiError('Не удалось распознать ID. Подойдут: ник, число из профиля Доты, Steam ID из 17 цифр или ссылка на профиль Steam.');
+    }
+    if (typeof accountId === 'object') {
+      await showNameSearch(accountId.search, token);
+      return;
     }
 
     const pRes = await odFetch(`/players/${accountId}`);
@@ -688,6 +695,29 @@ function showPlayerResults(profile, matches) {
   renderPlayerHeader(profile, matches.length);
   renderDashboard(profile, matches);
   renderReplayView(matches[0]);
+}
+
+async function showNameSearch(query, token) {
+  setScanning(true, 'Ищу игрока по нику...');
+  const res = await odFetch(`/search?q=${encodeURIComponent(query)}`);
+  const list = res.ok ? await res.json() : [];
+  if (token !== scanToken) return;
+  setScanning(false);
+
+  const players = (Array.isArray(list) ? list : []).slice(0, 8);
+  document.getElementById('search-title').textContent = players.length > 0
+    ? `Найдено по нику «${query}». Выбери себя:`
+    : `По нику «${query}» никого не нашли. Попробуй ID из профиля Доты.`;
+  document.getElementById('search-results').innerHTML = players.map(p => `
+    <button onclick="fillId('${esc(p.account_id)}')" class="flex items-center gap-3 p-2 rounded-lg text-left border border-slate-800 hover:border-slate-600 transition-colors">
+      <img loading="lazy" src="${esc(p.avatarfull || '')}" alt="" class="w-9 h-9 rounded-lg object-cover">
+      <span class="min-w-0">
+        <span class="block text-sm text-white truncate">${esc(p.personaname || 'Без имени')}</span>
+        <span class="block text-xs text-slate-400">ID ${esc(p.account_id)}</span>
+      </span>
+    </button>
+  `).join('');
+  document.getElementById('search-state').classList.remove('hidden');
 }
 
 function renderNoHistory(pData) {
@@ -1033,6 +1063,7 @@ function renderDashboard(profile, matches) {
   renderMetricCards(avgGPM, avgDeaths, avgKDA, avgTD, avgXPM, winrate, wins, count);
 
   // 5 Fundamental Pillars Audit
+  renderFormChart(matches);
   const audit = buildPlayerAudit(matches, skill);
   renderAudit(audit);
   renderPersonalPlan(audit);
@@ -1312,7 +1343,8 @@ function buildPlayerAudit(matches, skill) {
     games: scored.length,
     rankName,
     problems,
-    strengths
+    strengths,
+    progress: buildProgress(scored)
   };
 }
 
@@ -1327,6 +1359,59 @@ function auditCard(item, index) {
       <p class="text-xs text-slate-300">${esc(item.fact)}</p>
       <p class="text-xs text-slate-400 leading-relaxed pt-1 border-t border-slate-800/80">${esc(item.advice)}</p>
     </div>`;
+}
+
+let formChartInstance = null;
+
+// IMP показывает вклад относительно других игроков на этой роли, поэтому годится для сравнения матчей между собой
+function renderFormChart(matches) {
+  const card = document.getElementById('form-card');
+  const rows = matches.filter(m => m.imp != null).slice().reverse();
+  if (!card) return;
+  card.classList.toggle('hidden', rows.length < 3);
+  if (rows.length < 3) return;
+
+  const half = Math.floor(rows.length / 2);
+  const older = average(rows.slice(0, half).map(m => m.imp));
+  const recent = average(rows.slice(half).map(m => m.imp));
+  const delta = Math.round(recent - older);
+  document.getElementById('form-note').textContent = delta >= 3
+    ? `Форма растёт: вклад в последних матчах выше на ${delta} пунктов IMP.`
+    : delta <= -3
+      ? `Форма падает: вклад в последних матчах ниже на ${Math.abs(delta)} пунктов IMP.`
+      : 'Форма ровная: вклад в матчах почти не меняется.';
+
+  if (typeof Chart === 'undefined') return;
+  if (formChartInstance) formChartInstance.destroy();
+  formChartInstance = new Chart(document.getElementById('form-chart'), {
+    type: 'line',
+    data: {
+      labels: rows.map(m => getHeroName(m.hero_id)),
+      datasets: [{ data: rows.map(m => m.imp), borderColor: '#F0444F', backgroundColor: 'rgba(240,68,79,.12)', fill: true, tension: .3, pointRadius: 3 }]
+    },
+    options: {
+      maintainAspectRatio: false,
+      animation: { duration: 400 },
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { display: false }, grid: { display: false } },
+        y: { ticks: { color: '#A3ACBB' }, grid: { color: 'rgba(255,255,255,.06)' } }
+      }
+    }
+  });
+}
+
+function buildProgress(scored) {
+  if (scored.length < 10) return '';
+  const recent = scored.slice(0, 5);
+  const earlier = scored.slice(5);
+  const before = average(earlier.map(m => m.deaths ?? 0));
+  const now = average(recent.map(m => m.deaths ?? 0));
+  const diff = before - now;
+  if (Math.abs(diff) < 1) return `Смерти за матч почти не меняются: ${now.toFixed(1)} в последних 5 играх.`;
+  return diff > 0
+    ? `Прогресс: в последних 5 играх смертей меньше, ${now.toFixed(1)} против ${before.toFixed(1)} раньше.`
+    : `Стало хуже: в последних 5 играх смертей больше, ${now.toFixed(1)} против ${before.toFixed(1)} раньше.`;
 }
 
 function renderAudit(audit) {
@@ -1358,6 +1443,7 @@ function renderPersonalPlan(audit) {
   }
   box.innerHTML = `
     <p class="text-sm text-slate-300">${esc(currentPlayerName)}, на ближайшие 10 игр сосредоточься на этом:</p>
+    ${audit.progress ? `<p class="text-sm text-amber-300">${esc(audit.progress)}</p>` : ''}
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">${audit.problems.slice(0, 3).map(auditCard).join('')}</div>`;
 }
 
@@ -1450,7 +1536,7 @@ function renderMatchesTable(matches) {
 
     const matchGPM = m.gold_per_min || 0;
     const matchDeaths = m.deaths || 0;
-    const matchTier = isTurbo(m) ? 'Турбо' : !matchGPM ? '—' : matchGPM >= 650 && matchDeaths <= 5 ? 'Герой 1' : matchGPM >= 520 ? 'Рыцарь 2' : matchDeaths >= 9 ? 'Рекрут 3' : 'Страж 4';
+    const matchTier = m.imp != null ? `Оценка ${gradeFromImp(m.imp)}` : isTurbo(m) ? 'Турбо' : !matchGPM ? '—' : matchGPM >= 650 && matchDeaths <= 5 ? 'Герой 1' : matchGPM >= 520 ? 'Рыцарь 2' : matchDeaths >= 9 ? 'Рекрут 3' : 'Страж 4';
 
     return `
       <tr class="hover:bg-slate-800/30 transition-colors">
@@ -1757,7 +1843,16 @@ async function inspectCustomMatch() {
   }
 }
 
+function applyMatchGrade(m) {
+  const live = getLiveMatchData(m);
+  const detail = live ? playerDetail(live.match, live.player) : null;
+  if (!detail || detail.imp == null) return;
+  document.getElementById('rp-grade').textContent = `Оценка ${gradeFromImp(detail.imp)}`;
+  document.getElementById('rp-grade-sub').textContent = `Вклад в матч (IMP): ${detail.imp > 0 ? '+' : ''}${detail.imp}`;
+}
+
 function renderReplayDetails(m, isWin) {
+  applyMatchGrade(m);
   renderMatchStory(m, isWin);
   renderPhases(m);
   renderMatchMistakes(m);
@@ -1799,6 +1894,8 @@ function renderReplayView(m) {
 
   currentActiveReplayMatch = m;
   renderReplayDetails(m, isWin);
+
+  loadItemNames();
 
   // Подгружаем всех 10 игроков
   const cached = REAL_MATCH_CACHE[m.match_id];
@@ -2033,15 +2130,34 @@ function buildStoryFromRealMatch(realMatch, viewerHeroId, viewerSlot) {
       heroId: topEnemyRuiner.hero_id,
       desc: `Самый низкий импакт у врагов: ${topEnemyRuiner.deaths} смертей.`
     } : null),
-    moments: realMatch.moments || buildRealMoments(realMatch, durationStr)
+    moments: realMatch.moments || buildRealMoments(realMatch, durationStr, viewer)
   };
 }
 
 // Только события, которые есть в ответе API. Выдуманные тайминги здесь не нужны.
-function buildRealMoments(match, durationStr) {
+function buildRealMoments(match, durationStr, viewer) {
   const moments = [];
   if (match.first_blood_time != null) {
     moments.push({ time: formatMatchDuration(match.first_blood_time), phase: 'ПЕРВАЯ КРОВЬ', title: 'Первая кровь', desc: 'Первое убийство в матче.' });
+  }
+  const details = match.details;
+  if (moments.length === 0 && details && details.firstBlood != null) {
+    moments.push({ time: formatMatchDuration(details.firstBlood), phase: 'ПЕРВАЯ КРОВЬ', title: 'Первая кровь', desc: 'Первое убийство в матче.' });
+  }
+  if (details && viewer) {
+    const lane = laneResult(match, viewer);
+    if (lane && lane !== 'tie') {
+      moments.push({ time: '10:00', phase: 'ЛИНИЯ', title: lane === 'win' ? 'Линия выиграна' : 'Линия проиграна', desc: 'Итог стадии линий по данным STRATZ.' });
+    }
+    const swing = worstSwing(details.leads, viewer.player_slot < 128);
+    if (swing) {
+      moments.push({ time: `${swing.minute}:00`, phase: 'ПЕРЕЛОМ', title: 'Резкая потеря золота', desc: `Команда потеряла ${Math.abs(swing.change).toLocaleString()} золота за 3 минуты.` });
+    }
+    const detail = playerDetail(match, viewer);
+    if (detail && detail.deaths.length > 0) {
+      const first = detail.deaths.reduce((a, b) => (a.time < b.time ? a : b));
+      moments.push({ time: formatClock(first.time), phase: 'СМЕРТЬ', title: 'Твоя первая смерть', desc: deathReasons(first).join(', ') || 'Подробности смотри в разборе ошибок ниже.' });
+    }
   }
   (match.objectives || [])
     .filter(o => o.type === 'CHAT_MESSAGE_ROSHAN_KILL')
@@ -2411,6 +2527,30 @@ function buildMatchMistakes(match, viewer) {
     mistakes.push(`Только ${(viewer.tower_damage || 0).toLocaleString()} урона по вышкам за ${formatMatchDuration(match.duration)} на кор-позиции.`);
   }
 
+  const detail = playerDetail(match, viewer);
+  if (detail) {
+    const lane = laneResult(match, viewer);
+    const where = LANE_NAMES[detail.lane] || 'линии';
+    if (lane === 'loss') mistakes.unshift(`Проиграна стадия линий на ${where}.`);
+    if (lane === 'win') good.push(`Выиграна стадия линий на ${where}.`);
+
+    const early = detail.deaths.filter(d => d.time < 600).length;
+    if (early >= 2) mistakes.push(`${early} смерти в первые 10 минут: враг рано получил золото и темп.`);
+
+    const fast = detail.deaths.filter(d => d.isBurst).length;
+    if (fast >= 3) mistakes.push(`${fast} раз убили за секунды: нужен предмет на выживание или позиция дальше от врага.`);
+
+    const unused = detail.deaths.filter(d => d.hasHealAvailable).length;
+    if (unused >= 2) mistakes.push(`${unused} раза умер с доступным лечением: нажимай его раньше.`);
+
+    const lost = detail.deaths.reduce((sum, d) => sum + (d.goldLost || 0), 0);
+    if (lost >= 1500) mistakes.push(`Потеряно ${lost.toLocaleString()} золота на смертях.`);
+
+    const kicks = detail.kills.filter(k => k.isSolo).length;
+    if (kicks >= 3) good.push(`${kicks} соло-убийств.`);
+    if (detail.award && AWARD_NAMES[detail.award]) good.unshift(`Награда матча: ${AWARD_NAMES[detail.award]}.`);
+  }
+
   return { mistakes, good };
 }
 
@@ -2531,6 +2671,60 @@ function renderActiveProModule(num, m) {
   container.innerHTML = renderProModuleLive(num, m);
 }
 
+const IMP_GRADES = [[30, 'S'], [15, 'A'], [0, 'B'], [-15, 'C']];
+const LANE_NAMES = { SAFE_LANE: 'лёгкой линии', MID_LANE: 'центре', OFF_LANE: 'сложной линии' };
+const AWARD_NAMES = { MVP: 'MVP матча', TOP_CORE: 'лучший кор', TOP_SUPPORT: 'лучший саппорт' };
+let itemNames = null;
+
+function gradeFromImp(imp) {
+  const found = IMP_GRADES.find(([limit]) => imp >= limit);
+  return found ? found[1] : 'D';
+}
+
+function playerDetail(match, player) {
+  return match.details && match.details.players ? match.details.players[player.hero_id] || null : null;
+}
+
+async function loadItemNames() {
+  if (itemNames || !SERVER_MODE) return;
+  try {
+    const res = await fetch('/api/items');
+    itemNames = res.ok ? await res.json() : null;
+  } catch (e) {
+    itemNames = null;
+  }
+}
+
+function laneResult(match, player) {
+  const detail = playerDetail(match, player);
+  if (!detail || !detail.lane) return null;
+  const isRadiant = player.player_slot < 128;
+  const mapLane = detail.lane === 'MID_LANE' ? 'mid'
+    : (detail.lane === 'SAFE_LANE') === isRadiant ? 'bottom' : 'top';
+  const outcome = match.details.lanes[mapLane];
+  if (!outcome || outcome === 'TIE') return outcome === 'TIE' ? 'tie' : null;
+  return (outcome === 'RADIANT_VICTORY' || outcome === 'RADIANT_STOMP') === isRadiant ? 'win' : 'loss';
+}
+
+function deathReasons(death) {
+  const reasons = [];
+  if (death.isBurst) reasons.push('убили за секунды, не успел среагировать');
+  if (death.hasHealAvailable) reasons.push('лечение было доступно, но не использовано');
+  if (death.isAttemptTpOut) reasons.push('пытался уйти телепортом');
+  if (death.isDieBack) reasons.push('умер сразу после возвращения');
+  if (death.isEngagedOnDeath === false) reasons.push('поймали вне драки');
+  return reasons;
+}
+
+function worstSwing(leads, isRadiant) {
+  let best = null;
+  for (let minute = 3; minute < leads.length; minute++) {
+    const change = (leads[minute] - leads[minute - 3]) * (isRadiant ? 1 : -1);
+    if (!best || change < best.change) best = { minute, change };
+  }
+  return best && best.change <= -2000 ? best : null;
+}
+
 function getLiveMatchData(m) {
   const match = REAL_MATCH_CACHE[m.match_id];
   if (!match) return null;
@@ -2538,8 +2732,9 @@ function getLiveMatchData(m) {
   return player ? { match, player } : null;
 }
 
-function isMatchParsed(player) {
-  return Array.isArray(player.purchase_log) || Array.isArray(player.obs_log) || Array.isArray(player.kills_log);
+function isMatchParsed(player, match) {
+  const detail = match ? playerDetail(match, player) : null;
+  return (detail && detail.deaths.length + detail.items.length > 0) || Array.isArray(player.purchase_log) || Array.isArray(player.obs_log) || Array.isArray(player.kills_log);
 }
 
 function formatClock(sec) {
@@ -2614,6 +2809,12 @@ const RUNE_NAMES = { 0: 'двойной урон', 1: 'ускорение', 2: '
 const CONSUMABLE_ITEMS = new Set(['tango', 'tango_single', 'flask', 'clarity', 'enchanted_mango', 'faerie_fire', 'ward_observer', 'ward_sentry', 'ward_dispenser', 'tpscroll', 'dust', 'smoke_of_deceit', 'branches', 'blood_grenade']);
 
 function extractDeaths(match, player) {
+  const detail = playerDetail(match, player);
+  if (detail && detail.deaths.length > 0) {
+    return detail.deaths
+      .map(d => ({ ...d, killer: d.attacker }))
+      .sort((a, b) => a.time - b.time);
+  }
   const hero = HEROES_DB[player.hero_id];
   if (!hero) return [];
   const heroKey = `npc_dota_hero_${hero.slug}`;
@@ -2636,7 +2837,8 @@ function renderProModuleLive(num, m) {
   }
 
   const { match, player } = live;
-  const parsed = isMatchParsed(player);
+  const parsed = isMatchParsed(player, match);
+  const detail = playerDetail(match, player);
   const isRadiant = player.player_slot < 128;
   const teamKills = match.players
     .filter(p => (p.player_slot < 128) === isRadiant)
@@ -2645,11 +2847,17 @@ function renderProModuleLive(num, m) {
   switch (num) {
     case 29: {
       if (!parsed) return parseRequestBlock(m);
-      const items = (player.purchase_log || []).filter(i => !CONSUMABLE_ITEMS.has(i.key) && !String(i.key).startsWith('recipe'));
+      const purchases = detail && detail.items.length > 0
+        ? detail.items.map(i => ({ time: i.time, key: (itemNames && itemNames[i.itemId]) || `item_${i.itemId}` }))
+        : player.purchase_log || [];
+      const items = purchases.filter(i => !CONSUMABLE_ITEMS.has(i.key) && !String(i.key).startsWith('recipe'));
       return timelineList('Покупки предметов в этом матче', items.map(i => ({ label: formatItemName(i.key), time: formatClock(i.time) })));
     }
     case 30: {
       if (!parsed) return parseRequestBlock(m);
+      if (detail && player.obs_placed == null) {
+        return statGrid('Варды в этом матче', [statCard('Поставлено вардов', detail.wards.length)]);
+      }
       return statGrid('Варды в этом матче', [
         statCard('Observer поставлено', player.obs_placed ?? (player.obs_log || []).length),
         statCard('Sentry поставлено', player.sen_placed ?? (player.sen_log || []).length),
@@ -2666,6 +2874,12 @@ function renderProModuleLive(num, m) {
       (match.objectives || [])
         .filter(o => o.type === 'CHAT_MESSAGE_ROSHAN_KILL')
         .forEach(o => rows.push({ label: `Рошан (${o.team === 2 ? 'Свет' : 'Тьма'})`, time: formatClock(o.time) }));
+      if (detail) {
+        const lane = laneResult(match, player);
+        if (lane) rows.push({ label: `Линия: ${lane === 'win' ? 'выиграна' : lane === 'loss' ? 'проиграна' : 'вничью'}`, time: '10:00' });
+        const swing = worstSwing(match.details.leads, isRadiant);
+        if (swing) rows.push({ label: `Потеряно ${Math.abs(swing.change).toLocaleString()} золота за 3 минуты`, time: `${swing.minute}:00` });
+      }
       (player.runes_log || []).forEach(r => rows.push({ label: `Руна: ${RUNE_NAMES[r.key] || r.key}`, time: formatClock(r.time) }));
       return timelineList('Ключевые события матча', rows);
     }
@@ -2685,7 +2899,10 @@ function renderProModuleLive(num, m) {
       ]);
     }
     case 34: {
-      const lane = player.lh_t && player.lh_t[10] != null ? player.lh_t[10] : null;
+      const hits = detail ? detail.lastHits.slice(0, 10) : [];
+      const lane = player.lh_t && player.lh_t[10] != null
+        ? player.lh_t[10]
+        : hits.length === 10 ? hits.reduce((a, b) => a + b, 0) : null;
       return statGrid('Экономика матча', [
         statCard('Всего заработано', player.gold_per_min != null ? `${Math.round(player.gold_per_min * match.duration / 60).toLocaleString()}G` : null),
         statCard('Итоговая ценность', player.net_worth != null ? `${player.net_worth.toLocaleString()}G` : null),
@@ -2715,18 +2932,25 @@ function renderLiveDeaths(m) {
     container.innerHTML = liveNotice('В этом матче ты ни разу не умер.');
     return;
   }
-  if (!isMatchParsed(live.player)) {
+  if (!isMatchParsed(live.player, live.match)) {
     container.innerHTML = liveNotice(`Смертей в матче: ${live.player.deaths}. Время и убийц видно только после разбора реплея: нажми «Запросить разбор реплея» в блоке ниже.`);
     return;
   }
 
-  container.innerHTML = extractDeaths(live.match, live.player).map((d, i) => `
-    <div class="glass p-4 rounded-xl border space-y-1 relative pl-6">
-      <div class="flex items-center justify-between gap-2 font-mono text-xs">
-        <span class="font-bold text-white">⏱️ ${formatClock(d.time)}</span>
-        <span class="text-slate-400">Смерть #${i + 1}</span>
-      </div>
-      <p class="text-xs text-slate-300">Убил: ${esc(getHeroName(d.killer))}</p>
-    </div>
-  `).join('');
+  container.innerHTML = extractDeaths(live.match, live.player).map((d, i) => {
+    const reasons = deathReasons(d);
+    const cost = [];
+    if (d.goldLost) cost.push(`потеряно ${d.goldLost.toLocaleString()} золота`);
+    if (d.goldFed) cost.push(`враг получил ${d.goldFed.toLocaleString()}`);
+    if (d.timeDead) cost.push(`мёртв ${d.timeDead} сек.`);
+    return `
+      <div class="glass p-4 rounded-xl space-y-1">
+        <div class="flex items-center justify-between gap-2 text-sm">
+          <span class="font-bold text-white">${formatClock(d.time)} • Смерть #${i + 1}</span>
+          <span class="text-slate-400">${HEROES_DB[d.killer] ? `убил ${esc(getHeroName(d.killer))}` : ''}</span>
+        </div>
+        ${reasons.length > 0 ? `<p class="text-sm text-amber-300">${esc(reasons.join(', '))}</p>` : ''}
+        ${cost.length > 0 ? `<p class="text-[13px] text-slate-400">${esc(cost.join(', '))}</p>` : ''}
+      </div>`;
+  }).join('');
 }

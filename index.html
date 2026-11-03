@@ -224,6 +224,20 @@
       html { scroll-behavior: auto; }
       *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
     }
+
+    .rp-head { display: grid; gap: 1rem 1.5rem; grid-template-columns: minmax(0, 1fr) minmax(0, auto); align-items: center; }
+    .rp-head .rp-stats { grid-column: 1 / -1; order: 3; }
+    .rp-head .rp-score { text-align: right; }
+    #rp-kda, #rp-gpm, #rp-td { white-space: nowrap; font-size: clamp(.8rem, 1.3vw + .5rem, 1.15rem); }
+    .rp-stats > * { min-width: 0; padding-left: .35rem; padding-right: .35rem; }
+    @media (min-width: 1360px) {
+      .rp-head { grid-template-columns: auto minmax(420px, 1fr) minmax(190px, auto); }
+      .rp-head .rp-stats { grid-column: auto; order: 0; }
+    }
+    @media (max-width: 560px) {
+      .rp-head { grid-template-columns: minmax(0, 1fr); }
+      .rp-head .rp-score { text-align: left; }
+    }
   </style>
 </head>
 <body class="selection:bg-uc-red/30 selection:text-white">
@@ -276,11 +290,11 @@
           </div>
 
           <h1 class="text-3xl sm:text-5xl font-outfit font-extrabold text-white leading-tight tracking-tight">
-            Узнай свой <span class="text-uc-red glow-text">реальный уровень</span><br>в Dota 2
+            Разбор твоих игр в Dota 2:<br><span class="text-uc-red">что мешает апнуться</span>
           </h1>
 
           <p class="text-slate-400 text-sm leading-relaxed max-w-lg mx-auto">
-            Вставь свой ID. Сайт оценит твой ПТС по последним матчам, покажет главные ошибки и разберёт каждую игру.
+            Введи ник, ID или ссылку на Steam. Оценка ПТС, разбор каждой смерти и план на следующие игры. Бесплатно и без входа.
           </p>
 
           </div>
@@ -291,7 +305,7 @@
               <input
                 id="dota-id-input"
                 type="text"
-                placeholder="ID из Доты, Steam ID или ссылка на Steam"
+                placeholder="Ник, ID из Доты или ссылка на Steam"
                 class="w-full bg-[#08090D] text-white pl-4 pr-28 py-3.5 rounded-xl border border-uc-border focus:border-uc-red focus:outline-none text-sm placeholder:text-slate-600 font-mono transition-colors"
                 onkeypress="if(event.key==='Enter') analyzePlayer()"
               />
@@ -336,6 +350,11 @@
           <strong class="text-white text-sm" id="error-title">Ошибка</strong>
         </div>
         <p class="text-xs text-red-300 font-mono" id="error-message"></p>
+      </div>
+
+      <div id="search-state" class="hidden glass rounded-xl p-4 space-y-2">
+        <p id="search-title" class="text-sm text-slate-300"></p>
+        <div id="search-results" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
       </div>
 
       <!-- Профиль найден, но матчей в нём нет -->
@@ -484,7 +503,7 @@
                   <span id="role-supp-assists" class="text-emerald-400 font-bold">18.5</span>
                 </div>
                 <div class="p-1.5 rounded bg-black/60">
-                  <span class="text-slate-400 block text-xs">ВЫЖИВАЕМОСТЬ</span>
+                  <span class="text-slate-400 block text-xs">СМЕРТИ</span>
                   <span id="role-supp-deaths" class="text-rose-400 font-bold">7.8</span>
                 </div>
                 <div class="p-1.5 rounded bg-black/60">
@@ -498,6 +517,12 @@
         </div>
 
         <!-- 5 FUNDAMENTAL PILLARS OF DOTA SKILL AUDIT -->
+        <div id="form-card" class="glass rounded-2xl p-6 space-y-3 hidden">
+          <h3 class="font-outfit font-bold text-lg text-white">Форма по матчам</h3>
+          <p id="form-note" class="text-sm text-slate-400"></p>
+          <div style="height:170px"><canvas id="form-chart"></canvas></div>
+        </div>
+
         <div class="glass rounded-2xl p-6 border-uc-red/25 space-y-4">
           <div class="flex items-center justify-between pb-3 border-b border-uc-border/50">
             <div>
@@ -680,14 +705,14 @@
 
       <div id="replay-loading" class="hidden py-12 text-center">
         <div class="w-12 h-12 rounded-full border-[3px] border-uc-red border-t-transparent animate-spin mx-auto mb-3"></div>
-        <p class="text-sm text-uc-red font-mono font-bold">Искусственный интеллект анализирует реплей...</p>
+        <p class="text-sm text-uc-red font-mono font-bold">Загружаю матч...</p>
       </div>
 
       <div id="replay-container" class="space-y-4">
         <!-- Match Header -->
         <div class="glass rounded-2xl p-5 sm:p-6">
-          <div class="flex flex-col md:flex-row items-center gap-6">
-            <div class="flex items-center gap-4 flex-shrink-0">
+          <div class="rp-head">
+            <div class="rp-hero flex items-center gap-4">
               <img id="rp-hero-img" src="" alt="" class="w-20 h-12 object-cover hero-icon border border-uc-red/30">
               <div>
                 <h4 id="rp-hero-name" class="font-outfit font-bold text-xl text-white">—</h4>
@@ -698,7 +723,7 @@
               </div>
             </div>
 
-            <div class="flex-1 grid grid-cols-3 gap-3 text-center w-full">
+            <div class="rp-stats grid grid-cols-3 gap-3 text-center">
               <div class="p-3 rounded-xl bg-black/40 border border-slate-800/50">
                 <div class="text-xs uppercase text-slate-400 font-mono">K / D / A</div>
                 <div id="rp-kda" class="font-mono font-bold text-white mt-1">—</div>
@@ -713,7 +738,7 @@
               </div>
             </div>
 
-            <div class="text-center flex-shrink-0">
+            <div class="rp-score">
               <div class="text-xs text-slate-400 font-mono">Оценка матча</div>
               <div id="rp-grade" class="text-2xl font-outfit font-black text-white glow-text mt-1">—</div>
               <div id="rp-grade-sub" class="text-[13px] text-slate-400 font-mono">—</div>
@@ -897,7 +922,7 @@
         <div class="glass rounded-2xl p-5 sm:p-6 space-y-4">
           <h3 class="font-outfit font-bold text-lg text-white flex items-center gap-2">
             <i data-lucide="skull" class="w-5 h-5 text-uc-red"></i>
-            Ошибки в этом матче
+            Разбор ошибок в матче
           </h3>
           <div id="match-mistakes" class="space-y-2 mb-3"></div>
           <div id="death-timeline" class="space-y-3"></div>

@@ -162,7 +162,9 @@ const STRATZ_PLAYER_FIELDS = {
   towerDamage: ['towerDamage'],
   numLastHits: ['numLastHits', 'lastHits'],
   networth: ['networth', 'netWorth'],
-  position: ['position']
+  position: ['position'],
+  imp: ['imp'],
+  award: ['award']
 };
 
 let stratzPlayerSelection = null;
@@ -210,6 +212,23 @@ const stratzMatchQuery = fields => `query Match($id: Long!) {
   }
 }`;
 
+// Данные уровня реплея: без них разбор сводится к итоговым цифрам
+const STRATZ_DETAIL_QUERY = `query Detail($id: Long!) {
+  match(id: $id) {
+    firstBloodTime topLaneOutcome midLaneOutcome bottomLaneOutcome radiantNetworthLeads
+    players {
+      heroId isRadiant lane role imp award numDenies
+      stats {
+        networthPerMinute lastHitsPerMinute
+        deathEvents { time attacker goldLost goldFed timeDead positionX positionY isBurst isDieBack hasHealAvailable isAttemptTpOut isEngagedOnDeath }
+        killEvents { time target isSolo isGank isSmoke }
+        itemPurchases { time itemId }
+        wards { time type }
+      }
+    }
+  }
+}`;
+
 const STRATZ_GAME_MODES = { TURBO: 23, ALL_PICK_RANKED: 22, ALL_PICK: 1, CAPTAINS_MODE: 2, RANDOM_DRAFT: 3, SINGLE_DRAFT: 4, ALL_RANDOM: 5 };
 const STRATZ_LOBBIES = { RANKED: 7, UNRANKED: 0, PRACTICE: 1, TOURNAMENT: 2 };
 
@@ -227,6 +246,37 @@ async function stratzQuery(query, variables) {
     throw new UpstreamError('stratz', 502, String(body.errors[0].message || 'ошибка GraphQL').slice(0, 200));
   }
   return body.data;
+}
+
+async function stratzDetail(matchId) {
+  const data = await stratzQuery(STRATZ_DETAIL_QUERY, { id: Number(matchId) });
+  const match = data && data.match;
+  if (!match || !Array.isArray(match.players)) return null;
+
+  const players = {};
+  match.players.forEach(p => {
+    const stats = p.stats || {};
+    players[p.heroId] = {
+      lane: p.lane || null,
+      role: p.role || null,
+      imp: p.imp ?? null,
+      award: p.award && p.award !== 'NONE' ? p.award : null,
+      denies: p.numDenies ?? null,
+      networth: stats.networthPerMinute || [],
+      lastHits: stats.lastHitsPerMinute || [],
+      deaths: stats.deathEvents || [],
+      kills: stats.killEvents || [],
+      items: stats.itemPurchases || [],
+      wards: stats.wards || []
+    };
+  });
+
+  return {
+    firstBlood: match.firstBloodTime ?? null,
+    lanes: { top: match.topLaneOutcome, mid: match.midLaneOutcome, bottom: match.bottomLaneOutcome },
+    leads: match.radiantNetworthLeads || [],
+    players
+  };
 }
 
 function stratzPosition(value) {
@@ -251,7 +301,9 @@ function stratzPlayer(player) {
     tower_damage: player.towerDamage,
     last_hits: player.numLastHits,
     net_worth: player.networth,
-    position: stratzPosition(player.position)
+    position: stratzPosition(player.position),
+    imp: player.imp ?? null,
+    award: player.award && player.award !== 'NONE' ? player.award : null
   };
 }
 
@@ -472,13 +524,14 @@ async function addPositions(rows) {
     const part = rows.slice(i, i + PARALLEL_REQUESTS);
     const matches = await Promise.all(part.map(row => tryStratz(() => stratzMatchCached(row.match_id))));
     matches.forEach((match, index) => {
-      if (match) positions.set(String(part[index].match_id), new Map(match.players.map(p => [p.hero_id, p.position])));
+      if (match) positions.set(String(part[index].match_id), new Map(match.players.map(p => [p.hero_id, p])));
     });
   }
 
   return rows.map(row => {
     const known = positions.get(String(row.match_id));
-    return { ...row, position: row.position ?? (known && known.get(row.hero_id)) ?? null };
+    const player = known && known.get(row.hero_id);
+    return { ...row, position: row.position ?? (player && player.position) ?? null, imp: player ? player.imp : null };
   });
 }
 
@@ -524,12 +577,15 @@ function withPositions(match, positionsMatch) {
 
 async function loadMatch(matchId) {
   return cached(`match:${matchId}`, TTL.match, async () => {
-    const stratz = await tryStratz(() => stratzMatchCached(matchId));
+    const [stratz, details] = await Promise.all([
+      tryStratz(() => stratzMatchCached(matchId)),
+      tryStratz(() => stratzDetail(matchId))
+    ]);
 
     let opendotaFailure = null;
     try {
       const match = await odGet(`/matches/${matchId}`);
-      if (match && Array.isArray(match.players) && match.players.length > 0) return withPositions(match, stratz);
+      if (match && Array.isArray(match.players) && match.players.length > 0) return { ...withPositions(match, stratz), details };
     } catch (e) {
       if (e.status !== 404) {
         noteError('opendota', e.message);
@@ -537,12 +593,12 @@ async function loadMatch(matchId) {
       }
     }
 
-    if (stratz) return stratz;
+    if (stratz) return { ...stratz, details };
 
     if (config.steamKey) {
       try {
         const match = await steamMatch(matchId);
-        if (match) return match;
+        if (match) return { ...match, details };
       } catch (e) {
         noteError('steam', e.message);
       }
@@ -574,7 +630,7 @@ async function postToOpenDota(res, pathname) {
   sendJson(res, 200, body);
 }
 
-async function handleApi(req, res, pathname) {
+async function handleApi(req, res, pathname, url) {
   let match;
 
   if (req.method === 'GET' && pathname === '/api/health') {
@@ -589,6 +645,21 @@ async function handleApi(req, res, pathname) {
     if (!config.steamKey) return sendJson(res, 503, { error: 'Нет ключа Steam' });
     const accountId = await cached(`vanity:${match[1]}`, TTL.match, () => resolveVanity(match[1]));
     return accountId ? sendJson(res, 200, { account_id: accountId }) : sendJson(res, 404, { error: 'Not Found' });
+  }
+
+  if (req.method === 'GET' && pathname === '/api/items') {
+    const items = await cached('items', TTL.match, () => odGet('/constants/item_ids'));
+    return sendJson(res, 200, items);
+  }
+
+  if (req.method === 'GET' && pathname === '/api/od/search') {
+    const query = String(url.searchParams.get('q') || '').trim();
+    if (query.length < 2 || query.length > 40) return sendJson(res, 200, []);
+    const found = await cached(`search:${query.toLowerCase()}`, TTL.player, async () => {
+      const list = await fetchJson('opendota', `${config.opendota}/search?q=${encodeURIComponent(query)}${config.opendotaKey ? `&api_key=${encodeURIComponent(config.opendotaKey)}` : ''}`);
+      return Array.isArray(list) ? list.slice(0, 8) : [];
+    });
+    return sendJson(res, 200, found);
   }
 
   if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/players\/(\d{1,10})$/))) {
@@ -626,9 +697,11 @@ async function handleApi(req, res, pathname) {
 }
 
 const server = http.createServer(async (req, res) => {
+  let url;
   let pathname;
   try {
-    pathname = new URL(req.url, 'http://localhost').pathname;
+    url = new URL(req.url, 'http://localhost');
+    pathname = url.pathname;
   } catch (e) {
     return sendJson(res, 400, { error: 'Некорректный запрос' });
   }
@@ -643,7 +716,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
-    await handleApi(req, res, pathname);
+    await handleApi(req, res, pathname, url);
   } catch (e) {
     const status = e instanceof UpstreamError && e.status === 429 ? 429 : 503;
     if (!(e instanceof UpstreamError)) console.error('Ошибка сервера:', e.message);
