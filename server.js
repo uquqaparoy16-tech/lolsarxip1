@@ -42,7 +42,9 @@ const STATIC_FILES = {
   '/og.png': 'og.png',
   '/robots.txt': 'robots.txt',
   '/yandex_c3704f6e31ce03ca.html': 'yandex_c3704f6e31ce03ca.html',
-  '/google0b2e23d70af5f039.html': 'google0b2e23d70af5f039.html'
+  '/google0b2e23d70af5f039.html': 'google0b2e23d70af5f039.html',
+  '/sitemap.xml': 'sitemap.xml',
+  '/4ada15a6731c808ebe6f925c678ebdd7.txt': '4ada15a6731c808ebe6f925c678ebdd7.txt'
 };
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -50,7 +52,8 @@ const MIME = {
   '.css': 'text/css; charset=utf-8',
   '.png': 'image/png',
   '.webmanifest': 'application/manifest+json; charset=utf-8',
-  '.txt': 'text/plain; charset=utf-8'
+  '.txt': 'text/plain; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8'
 };
 
 function loadEnvFile() {
