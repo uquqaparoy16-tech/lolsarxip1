@@ -33,6 +33,7 @@ const STATIC_FILES = {
   '/case.js': 'case.js',
   '/replay.js': 'replay.js',
   '/chat.js': 'chat.js',
+  '/myheroes.js': 'myheroes.js',
   '/styles.css': 'styles.css',
   '/sw.js': 'sw.js',
   '/manifest.webmanifest': 'manifest.webmanifest',
@@ -954,6 +955,36 @@ async function loadOverview(accountId) {
   });
 }
 
+// ─── Лучшие герои игрока ────────────────────────────────────────────────
+
+const HERO_MATCH_LIMIT = 500;
+const HERO_MATCH_MIN_SECONDS = 600;
+const TURBO_MODE = 23;
+const HERO_MATCH_FIELDS = [
+  'hero_id', 'player_slot', 'radiant_win', 'duration', 'game_mode', 'start_time', 'leaver_status', 'party_size',
+  'kills', 'deaths', 'assists', 'gold_per_min', 'xp_per_min', 'last_hits', 'hero_damage', 'tower_damage',
+  'item_0', 'item_1', 'item_2', 'item_3', 'item_4', 'item_5'
+];
+
+async function loadHeroMatches(accountId) {
+  const ttl = list => (list.length > 0 ? OVERVIEW_TTL : TTL.retry);
+  return cached(`hero-matches:${accountId}`, ttl, async () => {
+    const fields = HERO_MATCH_FIELDS.map(field => `project=${field}`).join('&');
+    const list = await odGet(`/players/${accountId}/matches?limit=${HERO_MATCH_LIMIT}&${fields}`);
+    if (!Array.isArray(list)) return [];
+    return list.filter(m => m.game_mode !== TURBO_MODE && !m.leaver_status && m.duration >= HERO_MATCH_MIN_SECONDS);
+  });
+}
+
+// OpenDota сам считает, против кого игрок выигрывал на этом герое
+async function loadHeroVersus(accountId, heroId) {
+  return cached(`hero-vs:${accountId}:${heroId}`, OVERVIEW_TTL, async () => {
+    const list = await odGet(`/players/${accountId}/heroes?hero_id=${heroId}`);
+    if (!Array.isArray(list)) return [];
+    return list.filter(row => row.against_games > 0).map(row => ({ hero_id: row.hero_id, games: row.against_games, win: row.against_win }));
+  });
+}
+
 // ─── 2D-повтор ──────────────────────────────────────────────────────────
 
 const PLAYBACK_STEP_SECONDS = 5; // точки реже: для движения на карте этого хватает, а ответ в разы меньше
@@ -1385,6 +1416,14 @@ async function handleApi(req, res, pathname, url) {
 
   if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/players\/(\d{1,10})\/overview$/))) {
     return sendJson(res, 200, await loadOverview(match[1]));
+  }
+
+  if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/players\/(\d{1,10})\/heroMatches$/))) {
+    return sendJson(res, 200, await loadHeroMatches(match[1]));
+  }
+
+  if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/players\/(\d{1,10})\/heroVs\/(\d{1,3})$/))) {
+    return sendJson(res, 200, await loadHeroVersus(match[1], match[2]));
   }
 
   if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/players\/(\d{1,10})\/recentMatches$/))) {

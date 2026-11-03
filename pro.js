@@ -528,13 +528,9 @@ function buildHabits(games) {
   return { games: rows.length, points, habits: habits.sort((a, b) => b.score - a.score) };
 }
 
-function renderHabits(result) {
-  const box = document.getElementById('habits-result');
-  if (!result) {
-    box.innerHTML = '<p class="text-sm text-amber-300">Подробных данных пока мало: нужно хотя бы 3 матча, разобранных STRATZ. Попробуй позже.</p>';
-    return;
-  }
-  box.innerHTML = `
+function habitsHtml(result) {
+  if (!result) return '<p class="text-sm text-amber-300">Подробных данных пока мало: нужно хотя бы 3 матча, разобранных STRATZ. Попробуй позже.</p>';
+  return `
     <p class="text-sm text-slate-400">Разобрано матчей: ${result.games}. Сверху то, что мешает сильнее всего.</p>
     ${typeof deathMapHtml === 'function' && result.points.length > 0 ? `
       <div class="death-map-box">
@@ -551,20 +547,15 @@ function renderHabits(result) {
     </div>`;
 }
 
-async function proLoadHabits() {
-  const button = document.getElementById('habits-btn');
-  const box = document.getElementById('habits-result');
-  if (!button || !box) return;
-  const token = ++proState.habitsToken;
-  const games = pickScoredMatches(currentMatches).slice();
+function renderHabits(result) {
+  document.getElementById('habits-result').innerHTML = habitsHtml(result);
+}
+
+async function proLoadMatchDetails(games, workers, isActive, onStep) {
   const queue = games.slice();
   let done = 0;
-
-  button.disabled = true;
-  box.innerHTML = '<p class="text-sm text-slate-400">Смотрю матчи...</p>';
-
   const worker = async () => {
-    while (queue.length > 0 && token === proState.habitsToken) {
+    while (queue.length > 0 && isActive()) {
       const m = queue.shift();
       const known = REAL_MATCH_CACHE[m.match_id];
       if (!(known && known.__live)) {
@@ -575,10 +566,25 @@ async function proLoadHabits() {
         }
       }
       done += 1;
-      if (token === proState.habitsToken) box.innerHTML = `<p class="text-sm text-slate-400">Смотрю матчи: ${done} из ${games.length}...</p>`;
+      if (isActive()) onStep(done);
     }
   };
-  await Promise.all(Array.from({ length: PRO_HABIT_WORKERS }, worker));
+  await Promise.all(Array.from({ length: workers }, worker));
+}
+
+async function proLoadHabits() {
+  const button = document.getElementById('habits-btn');
+  const box = document.getElementById('habits-result');
+  if (!button || !box) return;
+  const token = ++proState.habitsToken;
+  const games = pickScoredMatches(currentMatches).slice();
+
+  button.disabled = true;
+  box.innerHTML = '<p class="text-sm text-slate-400">Смотрю матчи...</p>';
+
+  await proLoadMatchDetails(games, PRO_HABIT_WORKERS, () => token === proState.habitsToken, done => {
+    box.innerHTML = `<p class="text-sm text-slate-400">Смотрю матчи: ${done} из ${games.length}...</p>`;
+  });
   if (token !== proState.habitsToken) return;
 
   button.disabled = false;
@@ -935,6 +941,10 @@ function proOnDashboard(profile, matches, skill, audit) {
 
   saveRecentPlayer(profile);
   if (typeof statsResetOverview === 'function') statsResetOverview();
+  if (typeof mhReset === 'function') {
+    mhReset();
+    if (proState.summary) mhLoad();
+  }
   if (SERVER_MODE && currentAccountId && proState.summary) {
     fetch(`/api/visit/${currentAccountId}?pts=${proState.summary.skill.trueMMR}`, { method: 'POST', keepalive: true }).catch(() => {});
   }

@@ -159,9 +159,8 @@ function draftItemTitle(key) {
 }
 
 // Предметы под вражеский пик: чем больше врагов закрывает предмет, тем он выше
-function draftFitItems() {
-  const names = new Set(draft.enemy.map(getHeroName));
-  const role = draft.position >= 4 ? 'support' : 'core';
+function draftItemsFor(heroIds, role) {
+  const names = new Set(heroIds.map(getHeroName));
   const items = new Map();
 
   DRAFT_ITEM_RULES.forEach(rule => {
@@ -176,6 +175,10 @@ function draftFitItems() {
   });
 
   return [...items.values()].sort((a, b) => b.heroes.size - a.heroes.size).slice(0, DRAFT_FIT_MAX);
+}
+
+function draftFitItems() {
+  return draftItemsFor(draft.enemy, draft.position >= 4 ? 'support' : 'core');
 }
 
 function draftFitHtml() {
