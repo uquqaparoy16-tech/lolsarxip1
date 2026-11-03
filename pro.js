@@ -562,7 +562,7 @@ function coachRuleText(match, viewer) {
   const won = (viewer.player_slot < 128) === !!match.radiant_win;
   const detail = playerDetail(match, viewer);
   const grade = detail && detail.imp != null ? ` Оценка ${gradeFromImp(detail.imp)}.` : '';
-  const top = good[0] || mistakes[1] || '';
+  const top = good[0] || mistakes[1] || `Твой счёт: ${viewer.kills || 0}/${viewer.deaths || 0}/${viewer.assists || 0}.`;
   return [
     { label: 'Главное', text: `${won ? 'Победа' : 'Поражение'}.${grade} ${top}`.trim() },
     { label: 'Ошибка', text: mistakes[0] || 'Явных ошибок в цифрах нет.' },
