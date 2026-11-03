@@ -25,6 +25,7 @@ const STATIC_FILES = {
   '/index.html': 'index.html',
   '/app.js': 'app.js',
   '/pro.js': 'pro.js',
+  '/draft.js': 'draft.js',
   '/styles.css': 'styles.css',
   '/sw.js': 'sw.js',
   '/manifest.webmanifest': 'manifest.webmanifest',
@@ -856,6 +857,54 @@ async function coachAdvice(matchId, heroId, ip) {
   }
 }
 
+// ─── Драфт ──────────────────────────────────────────────────────────────
+
+const STRATZ_MATCHUP_QUERY = `query Matchup($id: Short!) {
+  heroStats {
+    heroVsHeroMatchup(heroId: $id, matchLimit: 0) {
+      advantage {
+        vs { heroId2 matchCount winCount }
+        with { heroId2 matchCount winCount }
+      }
+    }
+  }
+}`;
+
+function matchupRows(list) {
+  const rows = {};
+  (list || []).forEach(row => {
+    if (row.matchCount > 0) rows[row.heroId2] = { games: row.matchCount, wr: row.winCount / row.matchCount };
+  });
+  return rows;
+}
+
+async function stratzMatchup(heroId) {
+  const data = await stratzQuery(STRATZ_MATCHUP_QUERY, { id: heroId });
+  const block = data && data.heroStats && data.heroStats.heroVsHeroMatchup && data.heroStats.heroVsHeroMatchup.advantage;
+  const advantage = Array.isArray(block) ? block[0] : block;
+  if (!advantage) return null;
+  const vs = matchupRows(advantage.vs);
+  return Object.keys(vs).length > 0 ? { source: 'STRATZ', vs, with: matchupRows(advantage.with) } : null;
+}
+
+// У OpenDota только турнирные матчи и нет связок, поэтому это запасной источник
+async function opendotaMatchup(heroId) {
+  const list = await odGet(`/heroes/${heroId}/matchups`);
+  const vs = {};
+  (Array.isArray(list) ? list : []).forEach(row => {
+    if (row.games_played > 0) vs[row.hero_id] = { games: row.games_played, wr: row.wins / row.games_played };
+  });
+  return { source: 'OpenDota', vs, with: {} };
+}
+
+async function loadMatchup(heroId) {
+  const ttl = table => (config.stratzToken && table.source !== 'STRATZ' ? TTL.retry : TTL.match);
+  return cached(`matchup:${heroId}`, ttl, async () => {
+    const table = await tryStratz(() => stratzMatchup(heroId));
+    return table || opendotaMatchup(heroId);
+  });
+}
+
 // ─── Уведомления в Telegram ─────────────────────────────────────────────
 
 const VISIT_REPEAT_MS = 10 * 60 * 1000; // один игрок не чаще раза в 10 минут
@@ -959,6 +1008,15 @@ async function handleApi(req, res, pathname, url) {
     if (!/^\d{1,3}$/.test(heroId)) return sendJson(res, 400, { error: 'Некорректный запрос' });
     const data = await cached(`benchmarks:${heroId}`, TTL.match, () => fetchJson('opendota', `${config.opendota}/benchmarks?hero_id=${heroId}${config.opendotaKey ? `&api_key=${encodeURIComponent(config.opendotaKey)}` : ''}`));
     return sendJson(res, 200, data);
+  }
+
+  if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/draft\/(\d{1,3})$/))) {
+    return sendJson(res, 200, await loadMatchup(Number(match[1])));
+  }
+
+  if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/heroes\/(\d{1,3})\/itemPopularity$/))) {
+    const items = await cached(`hero-items:${match[1]}`, TTL.match, () => odGet(`/heroes/${match[1]}/itemPopularity`));
+    return sendJson(res, 200, items);
   }
 
   if (req.method === 'POST' && (match = pathname.match(/^\/api\/visit\/(\d{1,10})$/))) {

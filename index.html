@@ -82,11 +82,44 @@
     .pro-habit strong { display: block; font-size: .875rem; color: #fff; }
     .pro-habit span { display: block; font-size: .75rem; color: #A3ACBB; }
     .pro-habit p { margin-top: .35rem; font-size: .8rem; line-height: 1.45; color: #CBD5E1; }
+    .draft-teams { display: grid; gap: 1rem 1.5rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+    .draft-teams h3 { margin-bottom: .5rem; font-size: .9rem; font-weight: 600; color: #fff; }
+    .draft-teams small { font-weight: 500; color: #A3ACBB; }
+    .draft-slots { display: flex; flex-wrap: wrap; gap: .35rem; min-height: 2.6rem; }
+    .draft-slot { position: relative; width: 4rem; height: 2.4rem; overflow: hidden; border-radius: .4rem; background: rgba(0, 0, 0, .35); border: 1px solid rgba(255, 255, 255, .08); }
+    .draft-slot.empty { border-style: dashed; }
+    .draft-slot img { width: 100%; height: 100%; object-fit: cover; }
+    .draft-slot span { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 .15rem; font-size: .6rem; color: #fff; background: rgba(0, 0, 0, .65); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .draft-slot:hover { border-color: #F0444F; }
+    .draft-tips { padding-top: .75rem; font-size: .85rem; line-height: 1.5; color: #FDE68A; border-top: 1px solid rgba(255, 255, 255, .06); }
+    .draft-layout { display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+    @media (min-width: 1024px) { .draft-layout { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); } }
+    .draft-grid { display: grid; gap: .35rem; grid-template-columns: repeat(auto-fill, minmax(4.6rem, 1fr)); max-height: 34rem; overflow-y: auto; padding-right: .25rem; }
+    .draft-hero { min-width: 0; padding: .2rem; border-radius: .4rem; background: rgba(0, 0, 0, .3); border: 1px solid transparent; }
+    .draft-hero:hover { border-color: #F0444F; }
+    .draft-hero.taken { opacity: .25; cursor: not-allowed; }
+    .draft-hero img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: .25rem; }
+    .draft-hero span { display: block; margin-top: .15rem; font-size: .68rem; color: #CBD5E1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .draft-list { display: grid; gap: .4rem; }
+    .draft-pick { display: grid; grid-template-columns: 1.1rem 3.2rem minmax(0, 1fr); gap: .6rem; align-items: start; width: 100%; padding: .5rem .6rem; border-radius: .6rem; text-align: left; background: rgba(0, 0, 0, .3); border: 1px solid rgba(255, 255, 255, .06); }
+    .draft-pick:hover, .draft-pick.active { border-color: #F0444F; }
+    .draft-pick img { width: 3.2rem; height: 1.85rem; object-fit: cover; border-radius: .25rem; }
+    .draft-rank { font-size: .8rem; font-weight: 700; color: #A3ACBB; }
+    .draft-pick-body strong { display: block; font-size: .875rem; color: #fff; }
+    .draft-pick-body small { display: block; font-size: .75rem; color: #A3ACBB; }
+    .draft-pick-body small.good { color: #34D399; }
+    .draft-pick-body small.bad { color: #F87171; }
+    .draft-build { display: grid; gap: .85rem; }
+    .draft-build h4 { margin-bottom: .35rem; font-size: .8rem; font-weight: 600; color: #fff; }
+    .draft-items { display: flex; flex-wrap: wrap; gap: .35rem; }
+    .draft-item { display: inline-flex; align-items: center; gap: .35rem; padding: .2rem .5rem .2rem .25rem; border-radius: .4rem; font-size: .75rem; color: #CBD5E1; background: rgba(0, 0, 0, .3); }
+    .draft-item img { width: 1.6rem; height: 1.2rem; object-fit: cover; border-radius: .2rem; }
     .pro-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
     .pro-table th, .pro-table td { padding: .5rem .6rem; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, .06); }
     .pro-table thead th { color: #fff; font-weight: 600; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .pro-table tbody th { color: #A3ACBB; font-weight: 500; white-space: nowrap; }
     .pro-win { color: #34D399; font-weight: 700; }
+    .pro-pill[data-draft-side], .pro-pill[data-draft-position] { padding-left: .7rem; }
     .pro-input { flex: 1 1 14rem; min-width: 0; padding: .55rem .8rem; border-radius: .6rem; font-size: .85rem; color: #fff; background: #08090D; border: 1px solid rgba(255, 255, 255, .1); }
     .pro-input:focus { outline: 0; border-color: #F0444F; }
     #pro-toast { position: fixed; left: 50%; bottom: 1.5rem; z-index: 60; transform: translate(-50%, 1rem); max-width: calc(100vw - 2rem); padding: .6rem 1rem; border-radius: .7rem; font-size: .85rem; color: #fff; background: #1A1D29; border: 1px solid rgba(255, 255, 255, .12); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
@@ -344,6 +377,9 @@
         </button>
         <button id="tab-btn-replay" onclick="switchTab('replay')" class="tab-inactive px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors">
           Разбор матчей
+        </button>
+        <button id="tab-btn-draft" onclick="switchTab('draft')" class="tab-inactive px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors">
+          Драфт
         </button>
         <button id="tab-btn-plan" onclick="switchTab('plan')" class="tab-inactive px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors">
           Апнуться
@@ -1142,6 +1178,59 @@
     </section>
 
     <!-- ═══════ TAB 4: RANK UP PLAN & 5 PILLARS MASTERCLASS ═══════ -->
+    <section id="sec-draft" class="hidden space-y-6 anim-fade-up">
+      <div>
+        <h2 class="font-outfit font-bold text-2xl text-white">Драфт: кого брать и что покупать</h2>
+        <p class="text-sm text-slate-400 mt-1">Открой сайт на телефоне или втором экране и отмечай героев по ходу пика. Сайт не читает игру, поэтому героев выбираешь ты.</p>
+      </div>
+
+      <div class="glass rounded-2xl p-5 sm:p-6 space-y-4">
+        <div class="draft-teams">
+          <div><h3>Союзники <small id="draft-ally-count"></small></h3><div id="draft-ally" class="draft-slots"></div></div>
+          <div><h3>Враги <small id="draft-enemy-count"></small></h3><div id="draft-enemy" class="draft-slots"></div></div>
+          <div><h3>Баны <small id="draft-ban-count"></small></h3><div id="draft-ban" class="draft-slots"></div></div>
+        </div>
+        <div id="draft-tips" class="hidden draft-tips"></div>
+      </div>
+
+      <div class="draft-layout">
+        <div class="glass rounded-2xl p-5 sm:p-6 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex flex-wrap gap-2" role="group" aria-label="Куда добавить героя">
+              <button type="button" class="pro-pill" data-draft-side="ally" onclick="draftSetSide('ally')">Союзник</button>
+              <button type="button" class="pro-pill" data-draft-side="enemy" onclick="draftSetSide('enemy')">Враг</button>
+              <button type="button" class="pro-pill" data-draft-side="ban" onclick="draftSetSide('ban')">Бан</button>
+            </div>
+            <button type="button" class="pro-link" onclick="draftReset()">Очистить</button>
+          </div>
+          <input id="draft-search" type="text" class="pro-input w-full" placeholder="Поиск героя на английском" aria-label="Поиск героя" oninput="draftSearch(this.value)">
+          <div id="draft-grid" class="draft-grid"></div>
+        </div>
+
+        <div class="space-y-6">
+          <div class="glass rounded-2xl p-5 sm:p-6 space-y-3">
+            <h3 class="font-outfit font-bold text-lg text-white">Лучшие пики</h3>
+            <div class="flex flex-wrap gap-2" role="group" aria-label="Твоя позиция">
+              <button type="button" class="pro-pill" data-draft-position="1" onclick="draftSetPosition(1)">1 Лёгкая</button>
+              <button type="button" class="pro-pill" data-draft-position="2" onclick="draftSetPosition(2)">2 Центр</button>
+              <button type="button" class="pro-pill" data-draft-position="3" onclick="draftSetPosition(3)">3 Сложная</button>
+              <button type="button" class="pro-pill" data-draft-position="4" onclick="draftSetPosition(4)">4 Поддержка</button>
+              <button type="button" class="pro-pill" data-draft-position="5" onclick="draftSetPosition(5)">5 Поддержка</button>
+            </div>
+            <div id="draft-result" class="space-y-3" aria-live="polite"></div>
+          </div>
+
+          <div id="draft-build" class="hidden glass rounded-2xl p-5 sm:p-6 space-y-3 border-uc-red/25">
+            <div>
+              <h3 id="draft-build-title" class="font-outfit font-bold text-lg text-white"></h3>
+              <p class="text-sm text-slate-400">Самые популярные предметы в турнирных матчах по данным OpenDota.</p>
+            </div>
+            <div id="draft-build-body" class="draft-build"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="sec-plan" class="hidden space-y-6 max-w-5xl mx-auto anim-fade-up">
       <div class="glass rounded-2xl p-6 sm:p-10 space-y-8">
         <div class="text-center space-y-3">
@@ -1372,6 +1461,7 @@
   <div id="pro-toast" role="status" aria-live="polite"></div>
   <script src="app.js"></script>
   <script src="pro.js"></script>
+  <script src="draft.js"></script>
   <script>refreshIcons();</script>
 </body>
 </html>

@@ -456,7 +456,7 @@ function setDailyTip() {
 }
 
 function switchTab(tab) {
-  const tabs = ['tracker', 'showcase', 'replay', 'plan'];
+  const tabs = ['tracker', 'showcase', 'replay', 'draft', 'plan'];
   tabs.forEach(t => {
     const sec = document.getElementById(`sec-${t}`);
     const btn = document.getElementById(`tab-btn-${t}`);
@@ -477,6 +477,7 @@ function switchTab(tab) {
     renderReplayPills();
     updateReplayEmptyState();
   }
+  if (tab === 'draft' && typeof openDraft === 'function') openDraft();
 
   refreshIcons();
 }
