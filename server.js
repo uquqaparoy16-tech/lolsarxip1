@@ -35,6 +35,8 @@ const STATIC_FILES = {
   '/chat.js': 'chat.js',
   '/myheroes.js': 'myheroes.js',
   '/track.js': 'track.js',
+  '/theme.js': 'theme.js',
+  '/background.jpg': 'background.jpg',
   '/styles.css': 'styles.css',
   '/sw.js': 'sw.js',
   '/manifest.webmanifest': 'manifest.webmanifest',
@@ -53,6 +55,7 @@ const MIME = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
   '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.txt': 'text/plain; charset=utf-8',
   '.xml': 'application/xml; charset=utf-8'

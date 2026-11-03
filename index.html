@@ -259,6 +259,20 @@
     .rm-square { position: absolute; top: .35rem; width: .32rem; height: .32rem; margin-left: -.16rem; border-radius: .08rem; }
     .rm-square.ally { background: #34D399; }
     .rm-square.enemy { background: #F87171; }
+    #site-bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; background: #06070A; }
+    #site-bg-image { position: absolute; inset: -24px; background-position: center; background-size: cover; background-repeat: no-repeat; }
+    #site-bg-dim { position: absolute; inset: 0; background: #05060A; }
+    body.has-bg { background: transparent; }
+    body.has-bg::before { display: none; }
+    #theme-button { flex: none; margin-left: .5rem; padding: .35rem .7rem; border-radius: .5rem; font-size: .75rem; font-weight: 600; color: #CBD5E1; border: 1px solid rgba(255, 255, 255, .12); }
+    #theme-button:hover { color: #fff; border-color: rgba(255, 255, 255, .28); }
+    #theme-panel { position: fixed; top: 4rem; right: 1rem; z-index: 60; display: grid; gap: .7rem; width: min(calc(100vw - 2rem), 19rem); padding: .9rem 1rem; border-radius: .9rem; background: #0E1016; border: 1px solid rgba(255, 255, 255, .12); box-shadow: 0 16px 40px rgba(0, 0, 0, .5); }
+    #theme-panel.hidden { display: none; }
+    #theme-panel label { display: grid; gap: .25rem; font-size: .8rem; color: #CBD5E1; }
+    #theme-panel input[type=range] { width: 100%; accent-color: #F0444F; }
+    #theme-panel small { font-size: .72rem; color: #A3ACBB; }
+    .theme-head { display: flex; justify-content: space-between; align-items: center; color: #fff; font-size: .9rem; }
+    .theme-file { justify-self: stretch; text-align: center; cursor: pointer; }
     .rm-turns { margin-bottom: 1.1rem; }
     .rm-turns h4 { margin-bottom: .5rem; font-size: 1rem; font-weight: 700; color: #fff; }
     .rm-turn-list { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); }
@@ -542,6 +556,8 @@
 </head>
 <body class="selection:bg-uc-red/30 selection:text-white">
 
+  <div id="site-bg" class="hidden" aria-hidden="true"><div id="site-bg-image"></div><div id="site-bg-dim"></div></div>
+
   <!-- ═══════ HEADER ═══════ -->
   <header class="border-b border-uc-border/50 bg-[#06070A]/80 backdrop-blur-2xl sticky top-0 z-50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
@@ -576,6 +592,7 @@
           Апнуться
         </button>
       </nav>
+      <button id="theme-button" type="button" onclick="themeTogglePanel()" aria-controls="theme-panel">Фон</button>
 
     </div>
   </header>
@@ -1751,6 +1768,16 @@
     <p>Сайт анонимно считает действия посетителей, чтобы становиться лучше. IP и личные данные не сохраняются.</p>
   </footer>
 
+  <div id="theme-panel" class="hidden" role="dialog" aria-label="Настройка фона">
+    <div class="theme-head"><strong>Свой фон</strong><button type="button" class="pro-link" onclick="themeTogglePanel()">Закрыть</button></div>
+    <label class="pro-btn theme-file">Загрузить картинку<input id="theme-file" class="hidden" type="file" accept="image/jpeg,image/png,image/webp" onchange="themePick(this)"></label>
+    <label>Затемнение<input id="theme-dim" type="range" min="0" max="90" oninput="themeSet('dim', this.value)"></label>
+    <label>Размытие<input id="theme-blur" type="range" min="0" max="20" oninput="themeSet('blur', this.value)"></label>
+    <label>Плотность карточек<input id="theme-cards" type="range" min="40" max="100" oninput="themeSet('cards', this.value)"></label>
+    <button id="theme-reset" type="button" class="pro-link hidden" onclick="themeReset()">Убрать мой фон</button>
+    <small>Картинка остаётся только в этом браузере и никуда не отправляется.</small>
+  </div>
+
   <div id="pro-toast" role="status" aria-live="polite"></div>
   <button id="chat-button" type="button" class="hidden" onclick="chatToggle()">Написать автору<span id="chat-badge" class="hidden"></span></button>
   <div id="chat-panel" class="hidden" role="dialog" aria-label="Чат с автором сайта">
@@ -1769,6 +1796,7 @@
   <script src="replay.js"></script>
   <script src="myheroes.js"></script>
   <script src="chat.js"></script>
+  <script src="theme.js"></script>
   <script src="track.js"></script>
   <script>refreshIcons();</script>
 </body>
