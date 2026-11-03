@@ -382,14 +382,14 @@ function mapLandmarks() {
 }
 
 function mapBackground(id, bare = false) {
-  const texture = mapTexture();
+  const texture = bare ? '' : mapTexture();
   return `
     <defs>
       <radialGradient id="${id}-good"><stop offset="0" stop-color="#6EE7B7"/><stop offset="1" stop-color="#6EE7B7" stop-opacity="0"/></radialGradient>
       <radialGradient id="${id}-bad"><stop offset="0" stop-color="#FCA5A5"/><stop offset="1" stop-color="#FCA5A5" stop-opacity="0"/></radialGradient>
       <clipPath id="${id}-pin" clipPathUnits="objectBoundingBox"><circle cx=".5" cy=".5" r=".5"/></clipPath>
     </defs>
-    <rect width="100" height="100" fill="#18261F"/>
+    ${bare ? '' : '<rect width="100" height="100" fill="#18261F"/>'}
     ${texture ? `<image href="${texture}" width="100" height="100"/>` : ''}
     ${mapLandmarks()}
     ${bare ? '' : `

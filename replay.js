@@ -38,7 +38,7 @@ const REPLAY_HEAL_ITEMS = {
   satanic: 'Satanic надо жать, пока ты бьёшь врага: он возвращает здоровье ударами.'
 };
 const REPLAY_SAVE_ITEMS = {
-  black_king_bar: 70, blink: 15, overwhelming_blink: 15, swift_blink: 15, arcane_blink: 15, force_staff: 19, hurricane_pike: 19,
+  black_king_bar: 70, force_staff: 19, hurricane_pike: 19,
   glimmer_cape: 14, ghost: 22, cyclone: 23, wind_waker: 23, invis_sword: 28, silver_edge: 20, lotus_orb: 15, manta: 30, sphere: 0
 };
 const REPLAY_CATEGORIES = { hero: 'Игра на герое', fight: 'Тимфайты и позиционирование', map: 'Карта и обзор', lane: 'Линия', team: 'Командная игра' };
@@ -623,7 +623,8 @@ function renderReplayShell() {
     <div class="rm-grid">
       <div class="rm-stage">
         <div class="rm-map">
-          <svg class="death-map" viewBox="0 0 100 100" role="img" aria-label="Карта матча">
+          <img class="rm-texture" src="${mapTexture()}" alt="">
+          <svg class="rm-overlay" viewBox="0 0 100 100" role="img" aria-label="Карта матча">
             ${mapBackground('replay', true)}
             <g id="rm-lairs">${MAP_ROSHAN_LAIRS.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.6" fill="none" stroke="#FDE047" stroke-opacity=".55" stroke-width=".3" stroke-dasharray=".9 .7"/>`).join('')}</g>
             <g id="rm-buildings"></g>

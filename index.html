@@ -229,7 +229,9 @@
       .rm-stage { order: 1; position: static; }
       .rm-side { order: 2; }
     }
-    .rm-map { position: relative; }
+    .rm-map { position: relative; aspect-ratio: 1; border-radius: .7rem; overflow: hidden; background: #18261F; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); }
+    .rm-texture, .rm-overlay { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .rm-overlay { will-change: transform; }
     .rm-call { position: absolute; display: flex; align-items: stretch; max-width: 70%; border-radius: .45rem; overflow: hidden; font-size: .78rem; pointer-events: none; background: #05070A; box-shadow: 0 0 0 1px rgba(255, 255, 255, .1); }
     .rm-call strong { padding: .15rem .4rem; color: #05070A; background: #FDE047; font-family: ui-monospace, monospace; }
     .rm-call span { padding: .15rem .5rem; color: #fff; }
