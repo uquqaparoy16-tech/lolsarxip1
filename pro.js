@@ -983,6 +983,7 @@ async function proCheckAi() {
     const data = res.ok ? await res.json() : null;
     proState.ai = !!(data && data.sources && data.sources.ai);
     proState.telegram = !!(data && data.sources && data.sources.telegram);
+    if (typeof chatStart === 'function') chatStart();
     if (proState.ai && currentActiveReplayMatch) renderCoach(currentActiveReplayMatch);
   } catch (e) {}
 }

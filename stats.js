@@ -487,33 +487,6 @@ async function statsOpenHero(heroId) {
     ${table ? `<p class="text-xs text-slate-400">Матчапы: ${esc(table.source)}. Предметы: турнирные матчи OpenDota.</p>` : ''}`;
 }
 
-function proToggleFeedback() {
-  document.getElementById('rp-feedback-form').classList.toggle('hidden');
-}
-
-async function proSendFeedback() {
-  const input = document.getElementById('rp-feedback-text');
-  const text = input.value.trim();
-  if (!text) return;
-  const button = document.getElementById('rp-feedback-send');
-  button.disabled = true;
-  let sent = false;
-  try {
-    const res = await fetch('/api/feedback', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, matchId: currentActiveReplayMatch ? currentActiveReplayMatch.match_id : '' })
-    });
-    sent = res.ok;
-  } catch (e) {}
-  button.disabled = false;
-  proToast(sent ? 'Спасибо, сообщение отправлено' : 'Не отправилось, попробуй позже');
-  if (sent) {
-    input.value = '';
-    proToggleFeedback();
-  }
-}
-
 function openHeroes() {
   if (stats.heroesReady) return;
   stats.heroesReady = true;

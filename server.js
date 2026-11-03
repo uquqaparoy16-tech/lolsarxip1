@@ -8,6 +8,7 @@
  * Ключи читаются из .env и наружу не отдаются.
  */
 
+const crypto = require('crypto');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -31,6 +32,7 @@ const STATIC_FILES = {
   '/map.js': 'map.js',
   '/case.js': 'case.js',
   '/replay.js': 'replay.js',
+  '/chat.js': 'chat.js',
   '/styles.css': 'styles.css',
   '/sw.js': 'sw.js',
   '/manifest.webmanifest': 'manifest.webmanifest',
@@ -159,7 +161,7 @@ async function cached(key, ttl, load) {
 const hits = new Map();
 
 const coachHits = new Map();
-const feedbackHits = new Map();
+const chatHits = new Map();
 
 function overLimit(store, ip, limit) {
   const now = Date.now();
@@ -905,9 +907,10 @@ async function loadProHero(heroId) {
 
 const OVERVIEW_TTL = 60 * 60 * 1000;
 const PRO_MONTHS_SECONDS = 15552000; // полгода
-const FEEDBACK_MAX_BYTES = 2048;
-const FEEDBACK_PER_MINUTE = 3;
-const FEEDBACK_HOURLY_LIMIT = 20;
+const CHAT_MAX_BYTES = 2048;
+const CHAT_PER_MINUTE = 5;
+const CHAT_HOURLY_LIMIT = 40;
+const TELEGRAM_MAX_BYTES = 64 * 1024;
 const RECORD_FIELDS = ['kills', 'assists', 'gold_per_min', 'xp_per_min', 'hero_damage', 'tower_damage', 'last_hits'];
 
 async function loadRecord(accountId, field) {
@@ -1101,34 +1104,114 @@ async function notifyVisit(accountId, points) {
   }
 }
 
-const feedbackHour = { resetAt: 0, count: 0 };
+// ─── Чат с посетителями ─────────────────────────────────────────────────
 
-function feedbackAllowed() {
+// Посетитель пишет на сайте, автор отвечает в Telegram через «ответить» на сообщение бота.
+// Номер чата лежит в самом сообщении, поэтому ответ дойдёт и после перезапуска сервера.
+const CHAT_CODE = /Чат ([a-f0-9]{16})/;
+const CHAT_MAX = 500;
+const CHAT_MAX_MESSAGES = 50;
+const CHAT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const CHAT_ONLINE_MS = 90 * 1000;
+const chats = new Map();
+const chatHour = { resetAt: 0, count: 0 };
+let chatMessageId = Date.now();
+
+function chatAllowed() {
   const now = Date.now();
-  if (feedbackHour.resetAt <= now) {
-    feedbackHour.resetAt = now + 60 * 60 * 1000;
-    feedbackHour.count = 0;
+  if (chatHour.resetAt <= now) {
+    chatHour.resetAt = now + 60 * 60 * 1000;
+    chatHour.count = 0;
   }
-  feedbackHour.count += 1;
-  return feedbackHour.count <= FEEDBACK_HOURLY_LIMIT;
+  chatHour.count += 1;
+  return chatHour.count <= CHAT_HOURLY_LIMIT;
 }
 
-async function notifyFeedback(text, matchId) {
-  if (!feedbackAllowed()) return false;
+function chatRoom(id) {
+  const now = Date.now();
+  chats.forEach((room, key) => {
+    if (now - room.touched > CHAT_TTL_MS) chats.delete(key);
+  });
+  if (!chats.has(id)) {
+    if (chats.size >= CHAT_MAX) chats.delete(chats.keys().next().value);
+    chats.set(id, { messages: [], seenAt: 0, touched: now, known: false });
+  }
+  return chats.get(id);
+}
+
+async function telegramCall(method, body) {
+  return fetchJson('telegram', `${config.telegram.api}/bot${config.telegram.token}/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
+async function telegramSend(text) {
+  return telegramCall('sendMessage', { chat_id: config.telegram.chatId, disable_web_page_preview: true, text });
+}
+
+async function chatToOwner(id, text, matchId) {
+  if (!chatAllowed()) return false;
+  const room = chatRoom(id);
+  const hint = room.known ? '' : '\n\nЧтобы ответить, нажми на это сообщение и выбери «Ответить».';
+  room.known = true;
+  room.touched = Date.now();
   try {
-    await fetchJson('telegram', `${config.telegram.api}/bot${config.telegram.token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: config.telegram.chatId,
-        disable_web_page_preview: true,
-        text: `Не согласны с разбором${matchId ? ` матча ${matchId}` : ''}:\n${text}`
-      })
-    });
+    await telegramSend(`Сообщение с сайта${matchId ? ` про матч ${matchId}` : ''}\n${text}\n\nЧат ${id}${hint}`);
     return true;
   } catch (e) {
     noteError('telegram', e.message);
     return false;
+  }
+}
+
+async function chatFromOwner(update) {
+  const message = update && update.message;
+  if (!message || String(message.chat && message.chat.id) !== config.telegram.chatId) return;
+
+  const quoted = message.reply_to_message && message.reply_to_message.text;
+  const code = quoted ? quoted.match(CHAT_CODE) : null;
+  try {
+    if (!code) {
+      await telegramSend('Чтобы посетитель увидел ответ, нажми на его сообщение и выбери «Ответить».');
+      return;
+    }
+    const text = typeof message.text === 'string' ? message.text.trim().slice(0, 1000) : '';
+    if (!text) {
+      await telegramSend('На сайт доходит только текст.');
+      return;
+    }
+    const room = chatRoom(code[1]);
+    chatMessageId += 1;
+    room.messages.push({ id: chatMessageId, text });
+    room.messages = room.messages.slice(-CHAT_MAX_MESSAGES);
+    room.touched = Date.now();
+    if (Date.now() - room.seenAt > CHAT_ONLINE_MS) {
+      await telegramSend('Посетителя сейчас нет на сайте. Он увидит ответ, когда вернётся, если сервер не успеет уснуть.');
+    }
+  } catch (e) {
+    noteError('telegram', e.message);
+  }
+}
+
+// Секрет не даёт посторонним подделать запрос от Telegram
+function telegramSecret() {
+  return crypto.createHash('sha256').update(config.telegram.token).digest('hex').slice(0, 48);
+}
+
+function secretMatches(value) {
+  const expected = Buffer.from(telegramSecret());
+  const given = Buffer.from(String(value || ''));
+  return given.length === expected.length && crypto.timingSafeEqual(given, expected);
+}
+
+async function setupTelegramWebhook() {
+  if (!telegramEnabled() || !/^https:/.test(config.siteUrl)) return;
+  try {
+    await telegramCall('setWebhook', { url: `${config.siteUrl}/api/telegram`, secret_token: telegramSecret(), allowed_updates: ['message'] });
+  } catch (e) {
+    noteError('telegram', `вебхук: ${e.message}`);
   }
 }
 
@@ -1237,19 +1320,39 @@ async function handleApi(req, res, pathname, url) {
     return sendJson(res, 200, await loadProHero(Number(match[1])));
   }
 
-  if (req.method === 'POST' && pathname === '/api/feedback') {
-    if (!telegramEnabled()) return sendJson(res, 503, { error: 'Отзывы отключены' });
-    if (overLimit(feedbackHits, clientIp(req), FEEDBACK_PER_MINUTE)) return sendJson(res, 429, { error: 'Слишком много сообщений' });
+  if (req.method === 'POST' && pathname === '/api/chat') {
+    if (!telegramEnabled()) return sendJson(res, 503, { error: 'Чат отключён' });
+    if (overLimit(chatHits, clientIp(req), CHAT_PER_MINUTE)) return sendJson(res, 429, { error: 'Слишком много сообщений' });
     let body;
     try {
-      body = JSON.parse(await readBody(req, FEEDBACK_MAX_BYTES));
+      body = JSON.parse(await readBody(req, CHAT_MAX_BYTES));
     } catch (e) {
       return sendJson(res, 400, { error: 'Некорректный запрос' });
     }
     const text = typeof body.text === 'string' ? body.text.trim().slice(0, 500) : '';
+    const id = /^[a-f0-9]{16}$/.test(String(body.id)) ? String(body.id) : '';
     const matchId = /^\d{6,12}$/.test(String(body.matchId)) ? String(body.matchId) : '';
-    if (!text) return sendJson(res, 400, { error: 'Пустое сообщение' });
-    return (await notifyFeedback(text, matchId)) ? sendJson(res, 200, { ok: true }) : sendJson(res, 503, { error: 'Не отправилось' });
+    if (!text || !id) return sendJson(res, 400, { error: 'Некорректный запрос' });
+    return (await chatToOwner(id, text, matchId)) ? sendJson(res, 200, { ok: true }) : sendJson(res, 503, { error: 'Не отправилось' });
+  }
+
+  if (req.method === 'GET' && (match = pathname.match(/^\/api\/chat\/([a-f0-9]{16})$/))) {
+    const room = chatRoom(match[1]);
+    room.seenAt = Date.now();
+    const after = Number(url.searchParams.get('after')) || 0;
+    return sendJson(res, 200, { messages: room.messages.filter(message => message.id > after) });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/telegram') {
+    if (!telegramEnabled() || !secretMatches(req.headers['x-telegram-bot-api-secret-token'])) return sendJson(res, 404, { error: 'Not Found' });
+    let update = null;
+    try {
+      update = JSON.parse(await readBody(req, TELEGRAM_MAX_BYTES));
+    } catch (e) {
+      return sendJson(res, 200, { ok: true }); // иначе Telegram будет повторять запрос
+    }
+    await chatFromOwner(update);
+    return sendJson(res, 200, { ok: true });
   }
 
   if (req.method === 'POST' && (match = pathname.match(/^\/api\/visit\/(\d{1,10})$/))) {
@@ -1352,6 +1455,7 @@ if (require.main === module) {
   });
 
   server.listen(config.port, config.host, () => {
+    setupTelegramWebhook();
     console.log(`Сайт: http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.port}`);
     console.log(`STRATZ: ${config.stratzToken ? 'подключён' : 'нет токена'}, Steam: ${config.steamKey ? 'подключён' : 'нет ключа'}, нейросеть: ${aiEnabled() ? 'подключена' : 'нет ключа'}, Telegram: ${telegramEnabled() ? 'подключён' : 'нет токена'}`);
     console.log(`Проверка .env: длина ключа Steam ${config.steamKey.length} (нужно 32), длина токена STRATZ ${config.stratzToken.length}`);

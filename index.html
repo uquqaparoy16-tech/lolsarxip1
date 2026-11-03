@@ -221,6 +221,19 @@
     .replay-moment ul { padding-left: 1rem; list-style: disc; }
     .replay-moment p { font-size: .75rem; color: #A3ACBB; }
     .replay-moment .pro-btn { justify-self: start; margin-top: .2rem; }
+    #chat-button { position: fixed; right: 1rem; bottom: 1rem; z-index: 50; padding: .55rem .9rem; border-radius: 999px; font-size: .82rem; font-weight: 600; color: #fff; background: #F0444F; box-shadow: 0 6px 20px rgba(0, 0, 0, .45); }
+    #chat-button.hidden { display: none; }
+    #chat-badge { margin-left: .4rem; padding: 0 .4rem; border-radius: 999px; font-size: .72rem; color: #F0444F; background: #fff; }
+    #chat-panel { position: fixed; right: 1rem; bottom: 4rem; z-index: 50; display: grid; gap: .5rem; width: min(22rem, calc(100vw - 2rem)); padding: .75rem; border-radius: .9rem; background: #11131B; border: 1px solid rgba(255, 255, 255, .12); box-shadow: 0 14px 40px rgba(0, 0, 0, .6); }
+    #chat-panel.hidden { display: none; }
+    .chat-head, .chat-foot { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+    .chat-head strong { font-size: .9rem; color: #fff; }
+    .chat-foot small { font-size: .7rem; line-height: 1.3; color: #A3ACBB; }
+    #chat-list { display: flex; flex-direction: column; gap: .3rem; height: 15rem; max-height: 40vh; overflow-y: auto; }
+    .chat-bubble { max-width: 85%; padding: .4rem .6rem; border-radius: .7rem; font-size: .82rem; line-height: 1.4; color: #fff; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .chat-bubble.me { align-self: flex-end; background: rgba(240, 68, 79, .35); }
+    .chat-bubble.owner { align-self: flex-start; background: rgba(255, 255, 255, .1); }
+    #chat-text { flex: none; width: 100%; resize: none; }
     .pro-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
     .pro-table th, .pro-table td { padding: .5rem .6rem; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, .06); }
     .pro-table thead th { color: #fff; font-weight: 600; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1081,11 +1094,7 @@
           <div id="rp-why" class="hidden case-why"></div>
           <div id="rp-analyst-body" class="space-y-4" aria-live="polite"></div>
           <div id="rp-feedback" class="hidden space-y-2">
-            <button type="button" class="pro-link" onclick="proToggleFeedback()">Не согласен с разбором</button>
-            <div id="rp-feedback-form" class="hidden space-y-2">
-              <textarea id="rp-feedback-text" class="pro-input w-full" rows="3" maxlength="500" aria-label="Что не так в разборе" placeholder="Что здесь неверно? Сообщение прочитает автор сайта."></textarea>
-              <button id="rp-feedback-send" type="button" class="pro-btn" onclick="proSendFeedback()">Отправить</button>
-            </div>
+            <button type="button" class="pro-link" onclick="chatOpen(currentActiveReplayMatch && currentActiveReplayMatch.match_id)">Не согласен с разбором: написать автору</button>
           </div>
         </div>
 
@@ -1652,6 +1661,13 @@
   </footer>
 
   <div id="pro-toast" role="status" aria-live="polite"></div>
+  <button id="chat-button" type="button" class="hidden" onclick="chatToggle()">Написать автору<span id="chat-badge" class="hidden"></span></button>
+  <div id="chat-panel" class="hidden" role="dialog" aria-label="Чат с автором сайта">
+    <div class="chat-head"><strong>Чат с автором сайта</strong><button type="button" class="pro-link" onclick="chatClose()">Закрыть</button></div>
+    <div id="chat-list" aria-live="polite"></div>
+    <textarea id="chat-text" class="pro-input" rows="2" maxlength="500" aria-label="Сообщение автору" placeholder="Твоё сообщение"></textarea>
+    <div class="chat-foot"><small>Сообщения читает автор сайта. Не пиши пароли и личные данные.</small><button id="chat-send" type="button" class="pro-btn" onclick="chatSend()">Отправить</button></div>
+  </div>
   <script src="app.js"></script>
   <script src="pro.js"></script>
   <script src="draft.js"></script>
@@ -1660,6 +1676,7 @@
   <script src="map.js"></script>
   <script src="case.js"></script>
   <script src="replay.js"></script>
+  <script src="chat.js"></script>
   <script>refreshIcons();</script>
 </body>
 </html>
