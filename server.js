@@ -1418,6 +1418,13 @@ async function handleApi(req, res, pathname, url) {
     return sendJson(res, 200, await loadOverview(match[1]));
   }
 
+  if (req.method === 'GET' && pathname === '/api/od/schemaProbe') {
+    const name = String(url.searchParams.get('type') || '');
+    if (!/^Match[A-Za-z]{1,60}$/.test(name)) return sendJson(res, 400, { error: 'Некорректный запрос' });
+    const data = await stratzQuery(`{ __type(name: "${name}") { fields { name type { name kind ofType { name kind ofType { name kind ofType { name } } } } } } }`, {});
+    return sendJson(res, 200, data);
+  }
+
   if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/players\/(\d{1,10})\/heroMatches$/))) {
     return sendJson(res, 200, await loadHeroMatches(match[1]));
   }
