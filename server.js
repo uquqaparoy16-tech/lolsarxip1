@@ -983,9 +983,27 @@ async function stratzPlayback(matchId) {
   return Object.keys(heroes).length > 0 ? heroes : null;
 }
 
+const STRATZ_WARDS_QUERY = `query Wards($id: Long!) {
+  match(id: $id) {
+    playbackData { wardEvents { indexId time positionX positionY fromPlayer wardType action } }
+  }
+}`;
+
+async function stratzWards(matchId) {
+  const data = await stratzQuery(STRATZ_WARDS_QUERY, { id: Number(matchId) });
+  const events = data && data.match && data.match.playbackData && data.match.playbackData.wardEvents;
+  return Array.isArray(events) ? events : null;
+}
+
 async function loadPlayback(matchId) {
-  const ttl = heroes => (heroes ? TTL.match : TTL.retry);
-  return cached(`playback:${matchId}`, ttl, () => tryStratz(() => stratzPlayback(matchId)));
+  const ttl = result => (result.heroes ? TTL.match : TTL.retry);
+  return cached(`playback:${matchId}`, ttl, async () => {
+    const [heroes, wards] = await Promise.all([
+      tryStratz(() => stratzPlayback(matchId)),
+      tryStratz(() => stratzWards(matchId))
+    ]);
+    return { heroes, wards };
+  });
 }
 
 // ─── Драфт ──────────────────────────────────────────────────────────────
@@ -1212,7 +1230,7 @@ async function handleApi(req, res, pathname, url) {
   }
 
   if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/playback\/(\d{6,12})$/))) {
-    return sendJson(res, 200, { heroes: await loadPlayback(match[1]) });
+    return sendJson(res, 200, await loadPlayback(match[1]));
   }
 
   if (req.method === 'GET' && (match = pathname.match(/^\/api\/od\/pro\/(\d{1,3})$/))) {
