@@ -1496,6 +1496,55 @@ function sendJson(res, status, body, headers = {}) {
   res.end(JSON.stringify(body));
 }
 
+// Сторонние файлы отдаём со своего сервера: в России CDN за Cloudflare часто не загружаются.
+// Сервер скачивает файл один раз и хранит на диске, файлы берутся только из этого списка.
+const ASSET_DIR = path.join(ROOT, '.asset-cache');
+const ASSET_MAX_BYTES = 2 * 1024 * 1024;
+const STEAM_IMAGES = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react';
+const ASSET_SOURCES = [
+  [/^\/assets\/chart\.js$/, () => 'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.js'],
+  [/^\/assets\/lucide\.js$/, () => 'https://cdn.jsdelivr.net/npm/lucide@0.460.0/dist/umd/lucide.min.js'],
+  [/^\/assets\/logo\.png$/, () => `${STEAM_IMAGES}/global/dota2_logo_symbol.png`],
+  [/^\/assets\/hero\/([a-z0-9_]{1,40})\.png$/, match => `${STEAM_IMAGES}/heroes/${match[1]}.png`],
+  [/^\/assets\/item\/([a-z0-9_]{1,60})\.png$/, match => `${STEAM_IMAGES}/items/${match[1]}.png`]
+];
+
+function assetUrl(pathname) {
+  for (const [pattern, build] of ASSET_SOURCES) {
+    const match = pathname.match(pattern);
+    if (match) return build(match);
+  }
+  return null;
+}
+
+async function loadAsset(pathname, upstream) {
+  const file = path.join(ASSET_DIR, pathname.slice('/assets/'.length).replace(/\//g, '-'));
+  try {
+    return await fs.promises.readFile(file);
+  } catch (e) {}
+  const response = await fetch(upstream, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  if (!response.ok) return null;
+  const data = Buffer.from(await response.arrayBuffer());
+  if (data.length > ASSET_MAX_BYTES) return null;
+  try {
+    await fs.promises.mkdir(ASSET_DIR, { recursive: true });
+    await fs.promises.writeFile(file, data);
+  } catch (e) {
+    noteError('assets', e.message);
+  }
+  return data;
+}
+
+async function sendAsset(res, pathname, upstream) {
+  let data = null;
+  try {
+    data = await loadAsset(pathname, upstream);
+  } catch (e) {}
+  if (!data) return sendJson(res, 404, { error: 'Not Found' });
+  res.writeHead(200, { 'Content-Type': MIME[path.extname(pathname)], 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'public, max-age=604800' });
+  return res.end(data);
+}
+
 function sendStatic(res, file) {
   fs.readFile(path.join(ROOT, file), (err, data) => {
     if (err) return sendJson(res, 404, { error: 'Not Found' });
@@ -1706,6 +1755,8 @@ const server = http.createServer(async (req, res) => {
 
   if (!pathname.startsWith('/api/')) {
     if (req.method === 'GET' && STATIC_FILES[pathname]) return sendStatic(res, STATIC_FILES[pathname]);
+    const assetSource = req.method === 'GET' ? assetUrl(pathname) : null;
+    if (assetSource) return sendAsset(res, pathname, assetSource);
     return sendJson(res, 404, { error: 'Not Found' });
   }
 

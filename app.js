@@ -284,7 +284,7 @@ const HEROES_DB = {
 function getHeroIcon(heroId) {
   const h = HEROES_DB[heroId];
   if (h && h.slug) {
-    return `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/${h.slug}.png`;
+    return `${location.protocol === 'file:' ? 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes' : '/assets/hero'}/${h.slug}.png`;
   }
   // Неизвестный герой (новый патч): нейтральная заглушка, а не чужая иконка
   return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';

@@ -6,7 +6,7 @@
 const DRAFT_LIMITS = { ally: 4, enemy: 5, ban: 14 }; // пятое место в команде занимает сам игрок
 const DRAFT_TOP = 8;
 const DRAFT_MIN_GAMES = 30;
-const DRAFT_ITEM_ICON = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/items/';
+const DRAFT_ITEM_ICON = location.protocol === 'file:' ? 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/items/' : '/assets/item/';
 const DRAFT_ROLE_WORDS = { 1: ['Carry'], 2: ['Mid'], 3: ['Offlane'], 4: ['Support', 'Roam'], 5: ['Support'] };
 const DRAFT_STAGES = [
   ['start_game_items', 'Старт'],

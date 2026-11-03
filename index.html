@@ -17,14 +17,15 @@
   <meta property="og:image" content="https://dota-mmr-checker.onrender.com/og.png">
   <meta property="og:url" content="https://dota-mmr-checker.onrender.com/">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" href="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/global/dota2_logo_symbol.png" type="image/png">
+  <link rel="icon" href="icon-192.png" type="image/png">
   <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebApplication", "name": "Dota 2 True Skill", "url": "https://dota-mmr-checker.onrender.com/", "inLanguage": "ru", "applicationCategory": "GameApplication", "operatingSystem": "Any", "description": "Бесплатная проверка ПТС и разбор матчей Dota 2 по нику, ID или ссылке на Steam.", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "RUB"}}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Как проверить ПТС в Dota 2?", "acceptedAnswer": {"@type": "Answer", "text": "Введи ник, ID из Доты или ссылку на Steam в поле вверху страницы. Сайт посмотрит твои последние матчи и покажет официальный ранг и оценку ПТС по игре."}}, {"@type": "Question", "name": "Это мой настоящий ПТС?", "acceptedAnswer": {"@type": "Answer", "text": "Нет. Точный рейтинг показывает только сама игра. Сайт оценивает уровень по показателям в матчах: золоту, опыту, урону, смертям и влиянию на игру."}}, {"@type": "Question", "name": "Где взять свой ID в Dota 2?", "acceptedAnswer": {"@type": "Answer", "text": "Открой свой профиль в клиенте Dota 2: номер указан рядом с ником. Ещё подойдёт ссылка на профиль Steam или ник."}}, {"@type": "Question", "name": "Почему не видно моих матчей?", "acceptedAnswer": {"@type": "Answer", "text": "Скорее всего, в настройках Dota 2 выключена открытая история матчей. Включи её и сыграй одну игру, после этого матчи появятся."}}, {"@type": "Question", "name": "Что входит в разбор матча?", "acceptedAnswer": {"@type": "Answer", "text": "Карта с героями, вардами, зданиями и Рошаном, разбор каждой смерти по времени, главный руинер матча, советы к каждому моменту и сравнение с другими игроками."}}, {"@type": "Question", "name": "Сайт бесплатный? Нужно ли входить через Steam?", "acceptedAnswer": {"@type": "Answer", "text": "Сайт бесплатный, регистрация и вход через Steam не нужны. Пароль вводить не надо: сайт работает только с открытыми данными о матчах."}}]}]</script>
   <link rel="stylesheet" href="styles.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/lucide@0.460.0/dist/umd/lucide.min.js"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    const assetRoot = location.protocol === 'file:';
+    document.write(`<script src="${assetRoot ? 'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.js' : '/assets/chart.js'}"><\/script>`);
+    document.write(`<script src="${assetRoot ? 'https://cdn.jsdelivr.net/npm/lucide@0.460.0/dist/umd/lucide.min.js' : '/assets/lucide.js'}"><\/script>`);
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 
 
   <style>
@@ -1212,7 +1213,7 @@
             <!-- Culprit Avatar & Info -->
             <div class="md:col-span-4 p-4 rounded-xl bg-black/50 border border-slate-800 text-center space-y-3">
               <div class="relative inline-block mx-auto">
-                <img id="rp-culprit-img" src="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/tiny.png" alt="Tiny" class="w-24 h-16 object-cover rounded-xl border-2 border-emerald-500/50 mx-auto shadow-lg" onerror="this.style.opacity='0';">
+                <img id="rp-culprit-img" src="/assets/hero/tiny.png" alt="Tiny" class="w-24 h-16 object-cover rounded-xl border-2 border-emerald-500/50 mx-auto shadow-lg" onerror="this.style.opacity='0';">
                 <span id="rp-culprit-role-badge" class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded bg-black/90 text-xs font-mono font-bold text-white border border-slate-700 whitespace-nowrap">
                   Позиция 1 (Керри / MVP)
                 </span>
