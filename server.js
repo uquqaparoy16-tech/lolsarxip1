@@ -1419,8 +1419,23 @@ async function handleApi(req, res, pathname, url) {
   }
 
   if (req.method === 'GET' && pathname === '/api/od/schemaProbe') {
+    const sample = String(url.searchParams.get('sample') || '');
+    if (/^\d{6,12}$/.test(sample)) {
+      const data = await stratzQuery(`query S($id: Long!) { match(id: $id) { playbackData {
+        buildingEvents { time indexId type hp maxHp positionX positionY isRadiant npcId }
+        towerDeathEvents { time radiant dire }
+        roshanEvents { time hp maxHp x y createTime }
+        runeEvents { indexId time positionX positionY location rune action }
+      } } }`, { id: Number(sample) });
+      const play = data && data.match && data.match.playbackData;
+      if (!play) return sendJson(res, 200, { empty: true });
+      const brief = list => ({ count: (list || []).length, head: (list || []).slice(0, 4), tail: (list || []).slice(-3) });
+      const types = {};
+      (play.buildingEvents || []).forEach(e => { types[e.type] = (types[e.type] || 0) + 1; });
+      return sendJson(res, 200, { types, buildings: brief(play.buildingEvents), deaths: brief((play.buildingEvents || []).filter(e => e.hp === 0)), towers: brief(play.towerDeathEvents), roshan: brief(play.roshanEvents), runes: brief(play.runeEvents) });
+    }
     const name = String(url.searchParams.get('type') || '');
-    if (!/^Match[A-Za-z]{1,60}$/.test(name)) return sendJson(res, 400, { error: 'Некорректный запрос' });
+    if (!/^[A-Z][A-Za-z]{1,60}$/.test(name)) return sendJson(res, 400, { error: 'Некорректный запрос' });
     const data = await stratzQuery(`{ __type(name: "${name}") { fields { name type { name kind ofType { name kind ofType { name kind ofType { name } } } } } } }`, {});
     return sendJson(res, 200, data);
   }
