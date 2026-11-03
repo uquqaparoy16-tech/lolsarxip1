@@ -34,6 +34,7 @@ const STATIC_FILES = {
   '/replay.js': 'replay.js',
   '/chat.js': 'chat.js',
   '/myheroes.js': 'myheroes.js',
+  '/track.js': 'track.js',
   '/styles.css': 'styles.css',
   '/sw.js': 'sw.js',
   '/manifest.webmanifest': 'manifest.webmanifest',
@@ -1263,6 +1264,102 @@ async function notifyVisit(accountId, points) {
   }
 }
 
+// ─── Действия посетителей ───────────────────────────────────────────────
+
+// Сайт присылает только код действия, текст собирается здесь: чужой текст в Telegram не попадёт.
+// Действия копятся минуту и уходят одним сообщением, иначе бот писал бы на каждый клик.
+const TRACK_FLUSH_MS = Number(process.env.TRACK_FLUSH_MS) || 60 * 1000;
+const TRACK_MAX_BYTES = 512;
+const TRACK_PER_MINUTE = 30;
+const TRACK_HOURLY_LIMIT = 30;
+const TRACK_SESSION_EVENTS = 25;
+const TRACK_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
+const TRACK_BOTS = /bot|crawl|spider|slurp|preview|lighthouse|headlesschrome/i;
+const TRACK_TABS = { tracker: 'Профиль', showcase: 'Возможности', replay: 'Разбор матчей', draft: 'Драфт', heroes: 'Герои', plan: 'Апнуться' };
+const TRACK_NAME = /^[A-Za-z0-9' -]{1,32}$/;
+const TRACK_SOURCES = [[/(^|\.)google\./, 'из Google'], [/(^|\.)yandex\.|(^|\.)ya\.ru$/, 'из Яндекса'], [/(^|\.)bing\.com$/, 'из Bing'], [/(^|\.)t\.me$|telegram/, 'из Telegram'], [/(^|\.)vk\.(com|ru)$/, 'из VK']];
+const TRACK_ACTIONS = {
+  tab: value => (TRACK_TABS[value] ? `Открыл вкладку «${TRACK_TABS[value]}»` : null),
+  match: value => (/^\d{6,12}$/.test(value) ? `Открыл разбор матча ${value}` : null),
+  hero: value => (TRACK_NAME.test(value) ? `Смотрит советы по своему герою: ${value}` : null),
+  hero_errors: value => (TRACK_NAME.test(value) ? `Ищет ошибки на герое: ${value}` : null),
+  hero_page: value => (TRACK_NAME.test(value) ? `Смотрит страницу героя: ${value}` : null),
+  draft: value => (TRACK_NAME.test(value) ? `Драфт: выбрал ${value}` : null),
+  map_play: () => 'Запустил повтор на карте',
+  moment: () => 'Открыл момент на карте',
+  turn: () => 'Смотрит, что могло изменить игру',
+  overview: () => 'Открыл статистику за всё время',
+  habits: () => 'Ищет повторяющиеся ошибки',
+  compare: () => 'Сравнивает себя с другим игроком',
+  card: () => 'Сделал картинку для друзей',
+  chat: () => 'Открыл чат с автором'
+};
+const trackHits = new Map();
+const trackSessions = new Map();
+const trackHour = { resetAt: 0, count: 0 };
+
+function trackHead(value) {
+  const [device, host] = String(value).split('|');
+  const name = device === 'phone' ? 'телефон' : 'компьютер';
+  const clean = /^[a-z0-9.-]{1,60}$/.test(host || '') ? host : '';
+  const known = TRACK_SOURCES.find(([pattern]) => pattern.test(clean));
+  const source = known ? known[1] : clean ? `с сайта ${clean}` : 'прямой заход';
+  return `${name}, ${source}`;
+}
+
+function trackTime() {
+  return new Date().toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' });
+}
+
+function trackAllowed() {
+  const now = Date.now();
+  if (now > trackHour.resetAt) {
+    trackHour.resetAt = now + 60 * 60 * 1000;
+    trackHour.count = 0;
+  }
+  trackHour.count += 1;
+  return trackHour.count <= TRACK_HOURLY_LIMIT;
+}
+
+async function trackFlush(id) {
+  const session = trackSessions.get(id);
+  if (!session) return;
+  session.timer = null;
+  const lines = session.lines.splice(0);
+  if (lines.length === 0 || !trackAllowed()) return;
+  try {
+    await telegramSend(`Посетитель ${id}${session.head ? ` (${session.head})` : ''}\n${lines.join('\n')}`);
+  } catch (e) {
+    noteError('telegram', e.message);
+  }
+}
+
+function trackForget() {
+  const now = Date.now();
+  trackSessions.forEach((session, id) => {
+    if (now - session.touched > TRACK_SESSION_TTL_MS && !session.timer) trackSessions.delete(id);
+  });
+}
+
+function trackAdd(id, action, value) {
+  const describe = TRACK_ACTIONS[action];
+  const text = action === 'open' ? 'Открыл сайт' : describe ? describe(value) : null;
+  if (!text) return;
+  trackForget();
+  const session = trackSessions.get(id) || { head: '', lines: [], timer: null, count: 0, touched: 0 };
+  trackSessions.set(id, session);
+  if (action === 'open') session.head = trackHead(value);
+  session.touched = Date.now();
+  session.count += 1;
+  if (session.count > TRACK_SESSION_EVENTS) return;
+  session.lines.push(`${trackTime()} ${text}`);
+  if (session.count === TRACK_SESSION_EVENTS) session.lines.push('Дальше действия этого посетителя не показываю.');
+  if (!session.timer) {
+    session.timer = setTimeout(() => trackFlush(id), TRACK_FLUSH_MS);
+    session.timer.unref();
+  }
+}
+
 // ─── Чат с посетителями ─────────────────────────────────────────────────
 
 // Посетитель пишет на сайте, автор отвечает в Telegram через «ответить» на сообщение бота.
@@ -1479,6 +1576,20 @@ async function handleApi(req, res, pathname, url) {
     return sendJson(res, 200, await loadProHero(Number(match[1])));
   }
 
+  if (req.method === 'POST' && pathname === '/api/track') {
+    if (!telegramEnabled() || TRACK_BOTS.test(String(req.headers['user-agent'] || ''))) return sendJson(res, 200, { ok: true });
+    if (overLimit(trackHits, clientIp(req), TRACK_PER_MINUTE)) return sendJson(res, 429, { error: 'Слишком много запросов' });
+    let body;
+    try {
+      body = JSON.parse(await readBody(req, TRACK_MAX_BYTES));
+    } catch (e) {
+      return sendJson(res, 400, { error: 'Некорректный запрос' });
+    }
+    if (!/^[a-f0-9]{8}$/.test(String(body.id)) || typeof body.action !== 'string' || typeof body.value !== 'string') return sendJson(res, 400, { error: 'Некорректный запрос' });
+    trackAdd(body.id, body.action, body.value);
+    return sendJson(res, 200, { ok: true });
+  }
+
   if (req.method === 'POST' && pathname === '/api/chat') {
     if (!telegramEnabled()) return sendJson(res, 503, { error: 'Чат отключён' });
     if (overLimit(chatHits, clientIp(req), CHAT_PER_MINUTE)) return sendJson(res, 429, { error: 'Слишком много сообщений' });
@@ -1598,7 +1709,8 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 404, { error: 'Not Found' });
   }
 
-  if (isRateLimited(clientIp(req))) {
+  // У журнала действий свой лимит: он не должен отнимать запросы у самого разбора
+  if (pathname !== '/api/track' && isRateLimited(clientIp(req))) {
     return sendJson(res, 429, { error: 'Слишком много запросов' }, { 'Retry-After': '60' });
   }
 
