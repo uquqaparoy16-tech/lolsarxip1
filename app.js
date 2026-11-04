@@ -400,6 +400,8 @@ const TURBO_GAME_MODE = 23;
 const MATCH_FIELDS = ['match_id', 'player_slot', 'radiant_win', 'hero_id', 'start_time', 'duration', 'game_mode', 'lobby_type', 'kills', 'deaths', 'assists', 'gold_per_min', 'xp_per_min', 'tower_damage', 'hero_damage', 'last_hits', 'average_rank'];
 
 let currentAccountId = null;
+// Игрок, которому в True Skill всегда показывается ранг Титан
+const TITAN_ACCOUNT_ID = '1921634731';
 let currentProfile = null;
 let scanToken = 0;
 let currentDataSource = '';
@@ -1004,6 +1006,14 @@ function renderDashboard(profile, matches) {
 
   // DEEP SKILL CALCULATION
   const skill = calculatePlayerTrueSkill(matches, officialTier);
+
+  // Персональный титан: у этого игрока True Skill всегда показывает ранг Титан
+  if (String(currentAccountId) === String(TITAN_ACCOUNT_ID)) {
+    skill.noData = false;
+    skill.trueTier = 80;
+    skill.trueMMR = Math.max(skill.trueMMR || 0, 8500);
+  }
+
   currentPlayerTrueMMR = skill.trueMMR;
   currentProfileTier = officialTier;
 

@@ -1,7 +1,7 @@
 'use strict';
 
 // Сначала сеть, поэтому обновления сайта видны сразу. Копия нужна только без интернета.
-const CACHE = 'true-skill-v16';
+const CACHE = 'true-skill-v17';
 const PAGES = ['/', '/app.js', '/pro.js', '/draft.js', '/analyst.js', '/stats.js', '/map.js', '/case.js', '/replay.js', '/myheroes.js', '/chat.js', '/track.js', '/theme.js', '/styles.css', '/manifest.webmanifest', '/icon-192.png'];
 
 self.addEventListener('install', event => {
